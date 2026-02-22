@@ -13,3 +13,4 @@ C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Contracts\bi
 C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Contracts\bin\Debug\net8.0\Ledgerly.Domain.pdb
 C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Contracts\obj\Debug\net8.0\Ledgerly.Contracts.csproj.AssemblyReference.cache
 C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Contracts\obj\Debug\net8.0\Ledgerly.2235FBEF.Up2Date
+C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Contracts\obj\Debug\net8.0\Ledgerly.Contracts.sourcelink.json

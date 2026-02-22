@@ -9,3 +9,4 @@ C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Domain\obj\D
 C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Domain\obj\Debug\net8.0\refint\Ledgerly.Domain.dll
 C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Domain\obj\Debug\net8.0\Ledgerly.Domain.pdb
 C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Domain\obj\Debug\net8.0\ref\Ledgerly.Domain.dll
+C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Domain\obj\Debug\net8.0\Ledgerly.Domain.sourcelink.json

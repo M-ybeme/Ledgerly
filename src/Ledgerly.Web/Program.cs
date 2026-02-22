@@ -1,6 +1,7 @@
 using Ledgerly.Web.Auth;
 using Ledgerly.Web.Components;
 using Ledgerly.Web.Services;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Radzen;
 
@@ -13,6 +14,8 @@ builder.Services.AddRadzenComponents();
 
 // Auth
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options => options.LoginPath = "/login");
 builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<AuthTokenService>();
 builder.Services.AddScoped<AuthenticationStateProvider, LedgerlyAuthStateProvider>();
@@ -64,6 +67,8 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()

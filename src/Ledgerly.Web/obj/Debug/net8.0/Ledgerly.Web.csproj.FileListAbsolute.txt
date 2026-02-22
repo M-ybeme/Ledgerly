@@ -35,3 +35,4 @@ C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Web\bin\Debu
 C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Web\bin\Debug\net8.0\Ledgerly.Domain.pdb
 C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Web\bin\Debug\net8.0\Radzen.Blazor.dll
 C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Web\bin\Debug\net8.0\appsettings.Production.json
+C:\Users\Marlo\OneDrive\Documents\codingStuff\Ledgerly\src\Ledgerly.Web\obj\Debug\net8.0\Ledgerly.Web.sourcelink.json
