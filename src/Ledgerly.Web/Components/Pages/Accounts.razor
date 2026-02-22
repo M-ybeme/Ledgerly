@@ -1,0 +1,75 @@
+@page "/accounts"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Ledgerly.Contracts.Accounts
+@using Ledgerly.Domain.Accounts
+@inject Ledgerly.Web.Services.AccountsApiClient Api
+@inject NotificationService NotificationService
+
+<PageTitle>Accounts — Ledgerly</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4">Accounts</RadzenText>
+
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Add Account</RadzenText>
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
+        <div>
+            <RadzenLabel Text="Name" />
+            <RadzenTextBox @bind-Value="newName" Placeholder="Account name" Style="display:block; width:220px;" />
+        </div>
+        <div>
+            <RadzenLabel Text="Type" />
+            <RadzenDropDown @bind-Value="newType" Data="@accountTypes" Style="display:block; width:160px;" />
+        </div>
+        <RadzenButton Text="Create" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="@Create" />
+    </RadzenStack>
+</RadzenCard>
+
+@if (accounts is null)
+{
+    <RadzenText>Loading…</RadzenText>
+}
+else if (accounts.Count == 0)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No accounts yet. Create one above.</RadzenAlert>
+}
+else
+{
+    <RadzenDataGrid Data="@accounts" TItem="AccountDto" AllowSorting="true" AllowColumnResize="true">
+        <Columns>
+            <RadzenDataGridColumn TItem="AccountDto" Property="Name" Title="Name" />
+            <RadzenDataGridColumn TItem="AccountDto" Property="Type" Title="Type" />
+            <RadzenDataGridColumn TItem="AccountDto" Title="Created">
+                <Template Context="a">@a.CreatedUtc.ToString("yyyy-MM-dd")</Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    private List<AccountDto>? accounts;
+    private string newName = "";
+    private AccountType newType = AccountType.Checking;
+    private IEnumerable<AccountType> accountTypes = Enum.GetValues<AccountType>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        accounts = await Api.GetAccountsAsync();
+    }
+
+    private async Task Create()
+    {
+        try
+        {
+            var created = await Api.CreateAccountAsync(new CreateAccountRequest(newName, newType));
+            accounts ??= new();
+            accounts.Add(created);
+            newName = "";
+            NotificationService.Notify(NotificationSeverity.Success, "Created", $"Account \"{created.Name}\" added.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+}

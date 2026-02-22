@@ -1,0 +1,67 @@
+@page "/login"
+@rendermode InteractiveServer
+@using Ledgerly.Contracts.Auth
+@using Ledgerly.Web.Auth
+@inject Ledgerly.Web.Services.AuthApiClient AuthApi
+@inject AuthTokenService AuthTokenService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Login — Ledgerly</PageTitle>
+
+<div style="max-width:400px; margin:80px auto;">
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.H5" style="margin-bottom:1.5rem;">Sign In to Ledgerly</RadzenText>
+
+        @if (errorMessage is not null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="false" style="margin-bottom:1rem;">@errorMessage</RadzenAlert>
+        }
+
+        <div style="margin-bottom:1rem;">
+            <RadzenLabel Text="Email" />
+            <RadzenTextBox @bind-Value="email" Placeholder="@emailPlaceholder" Style="display:block; width:100%;" />
+        </div>
+        <div style="margin-bottom:1.5rem;">
+            <RadzenLabel Text="Password" />
+            <RadzenPassword @bind-Value="password" Style="display:block; width:100%;" />
+        </div>
+
+        <RadzenButton Text="Sign In" ButtonStyle="ButtonStyle.Primary" Style="width:100%;" Click="@Submit" Disabled="@loading" />
+
+        <div style="margin-top:1rem; text-align:center; font-size:0.9em;">
+            <a href="/register">Create an account</a> &nbsp;|&nbsp;
+            <a href="/forgot-password">Forgot password?</a>
+        </div>
+    </RadzenCard>
+</div>
+
+@code {
+    private readonly string emailPlaceholder = "you@example.com";
+    private string email = "";
+    private string password = "";
+    private string? errorMessage;
+    private bool loading;
+
+    private async Task Submit()
+    {
+        errorMessage = null;
+        loading = true;
+        try
+        {
+            var dto = await AuthApi.LoginAsync(new LoginRequest(email, password));
+            await JS.InvokeVoidAsync("localStorage.setItem", "authToken", dto.Token);
+            await JS.InvokeVoidAsync("localStorage.setItem", "authEmail", dto.Email);
+            AuthTokenService.SetToken(dto);
+            Nav.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

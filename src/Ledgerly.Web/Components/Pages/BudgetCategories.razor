@@ -1,0 +1,131 @@
+@page "/budget-categories"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Ledgerly.Contracts.Budget
+@using Ledgerly.Domain.Budget
+@inject Ledgerly.Web.Services.BudgetCategoriesApiClient Api
+@inject NotificationService NotificationService
+
+<PageTitle>Categories — Ledgerly</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4">Budget Categories</RadzenText>
+
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">@(editingId.HasValue ? "Edit Category" : "Add Category")</RadzenText>
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
+        <div>
+            <RadzenLabel Text="Name" />
+            <RadzenTextBox @bind-Value="formName" Placeholder="e.g. Groceries" Style="display:block; width:200px;" />
+        </div>
+        <div>
+            <RadzenLabel Text="Type" />
+            <RadzenDropDown @bind-Value="formType" Data="@categoryTypes" Style="display:block; width:160px;" />
+        </div>
+        <RadzenButton Text="@(editingId.HasValue ? "Update" : "Add Category")" Icon="@(editingId.HasValue ? "save" : "add")" ButtonStyle="ButtonStyle.Primary" Click="@Save" />
+        @if (editingId.HasValue)
+        {
+            <RadzenButton Text="Cancel" Icon="cancel" ButtonStyle="ButtonStyle.Light" Click="@CancelEdit" />
+        }
+    </RadzenStack>
+</RadzenCard>
+
+@if (categories is null)
+{
+    <RadzenText>Loading…</RadzenText>
+}
+else if (categories.Count == 0)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No categories yet. Add one above.</RadzenAlert>
+}
+else
+{
+    <RadzenDataGrid Data="@categories" TItem="BudgetCategoryDto" AllowSorting="true" AllowColumnResize="true">
+        <Columns>
+            <RadzenDataGridColumn TItem="BudgetCategoryDto" Property="Name" Title="Name" />
+            <RadzenDataGridColumn TItem="BudgetCategoryDto" Property="Type" Title="Type" />
+            <RadzenDataGridColumn TItem="BudgetCategoryDto" Title="Created">
+                <Template Context="c">@c.CreatedUtc.ToString("yyyy-MM-dd")</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="BudgetCategoryDto" Title="Actions" Sortable="false" Width="120px">
+                <Template Context="c">
+                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => StartEdit(c))" class="rz-mr-1" />
+                    <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => Delete(c.Id))" />
+                </Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+}
+
+@code {
+    private List<BudgetCategoryDto>? categories;
+    private string formName = "";
+    private CategoryType formType = CategoryType.Expense;
+    private Guid? editingId;
+    private IEnumerable<CategoryType> categoryTypes = Enum.GetValues<CategoryType>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        categories = await Api.GetAllAsync();
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            if (editingId.HasValue)
+            {
+                var updated = await Api.UpdateAsync(editingId.Value,
+                    new UpdateBudgetCategoryRequest(formName, formType));
+                var idx = categories!.FindIndex(c => c.Id == editingId.Value);
+                if (idx >= 0) categories[idx] = updated;
+                NotificationService.Notify(NotificationSeverity.Success, "Updated", $"\"{updated.Name}\" saved.");
+                CancelEdit();
+            }
+            else
+            {
+                var created = await Api.CreateAsync(new CreateBudgetCategoryRequest(formName, formType));
+                categories ??= [];
+                categories.Add(created);
+                NotificationService.Notify(NotificationSeverity.Success, "Created", $"\"{created.Name}\" added.");
+                ResetForm();
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private void StartEdit(BudgetCategoryDto c)
+    {
+        editingId = c.Id;
+        formName = c.Name;
+        formType = c.Type;
+    }
+
+    private void CancelEdit()
+    {
+        editingId = null;
+        ResetForm();
+    }
+
+    private void ResetForm()
+    {
+        formName = "";
+        formType = CategoryType.Expense;
+    }
+
+    private async Task Delete(Guid id)
+    {
+        try
+        {
+            await Api.DeleteAsync(id);
+            categories?.RemoveAll(c => c.Id == id);
+            NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Category removed.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+}

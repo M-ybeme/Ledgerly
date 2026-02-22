@@ -1,0 +1,47 @@
+@using Ledgerly.Contracts.Scenarios
+@inject Ledgerly.Web.Services.ScenariosApiClient ScenariosApi
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+<RadzenStack Gap="1rem" Style="min-width: 300px;">
+    <div>
+        <RadzenLabel Text="Payment Date" />
+        <RadzenDatePicker @bind-Value="DateProxy" DateFormat="yyyy-MM-dd" Style="display:block; width:100%;" />
+    </div>
+    <div>
+        <RadzenLabel Text="Amount ($)" />
+        <RadzenNumeric @bind-Value="amount" Min="0.01m" Step="0.01m" Format="F2" Style="display:block; width:100%;" />
+    </div>
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="@(() => DialogService.Close(false))" />
+        <RadzenButton Text="Save Payment" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="@Submit" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public Guid ScenarioId { get; set; }
+    [Parameter] public Guid DebtAccountId { get; set; }
+
+    private DateOnly date = DateOnly.FromDateTime(DateTime.Today);
+    private decimal amount;
+
+    private DateTime? DateProxy
+    {
+        get => date.ToDateTime(TimeOnly.MinValue);
+        set => date = value.HasValue ? DateOnly.FromDateTime(value.Value) : date;
+    }
+
+    private async Task Submit()
+    {
+        try
+        {
+            await ScenariosApi.LogPaymentAsync(ScenarioId, new LogPaymentRequest(DebtAccountId, date, amount));
+            NotificationService.Notify(NotificationSeverity.Success, "Logged", "Payment recorded.");
+            DialogService.Close(true);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+}

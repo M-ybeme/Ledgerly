@@ -1,0 +1,324 @@
+@page "/credit"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Ledgerly.Contracts.Credit
+@using Ledgerly.Contracts.Debts
+@using Ledgerly.Contracts.Scenarios
+@using Ledgerly.Domain.Credit
+@inject Ledgerly.Web.Services.CreditApiClient CreditApi
+@inject Ledgerly.Web.Services.ScenariosApiClient ScenariosApi
+@inject Ledgerly.Web.Services.DebtAccountsApiClient DebtsApi
+@inject NotificationService NotificationService
+
+<PageTitle>Credit — Ledgerly</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4">Credit Score Estimator</RadzenText>
+
+@if (loading)
+{
+    <RadzenText>Loading…</RadzenText>
+}
+else
+{
+    <!-- Scenario Selector -->
+    <RadzenCard class="rz-mb-4">
+        <RadzenLabel Text="Scenario" />
+        <RadzenDropDown @bind-Value="selectedScenarioId"
+                        Data="@scenarios"
+                        ValueProperty="Id"
+                        TextProperty="Name"
+                        Placeholder="— Select a scenario —"
+                        Change="@OnScenarioChanged"
+                        Style="display:block; width:300px;" />
+    </RadzenCard>
+
+    @if (selectedScenarioId != Guid.Empty)
+    {
+        <!-- Credit Profile Form -->
+        <RadzenCard class="rz-mb-4">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Credit Profile</RadzenText>
+
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1.5rem" Wrap="FlexWrap.Wrap" class="rz-mb-3">
+                <div>
+                    <RadzenLabel Text="Score Range — Low" />
+                    <RadzenNumeric @bind-Value="formScoreLow" Min="300" Max="850" Style="display:block; width:110px;" />
+                </div>
+                <div>
+                    <RadzenLabel Text="Score Range — High" />
+                    <RadzenNumeric @bind-Value="formScoreHigh" Min="300" Max="850" Style="display:block; width:110px;" />
+                </div>
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                    <RadzenCheckBox @bind-Value="formHistoryIsClean" />
+                    <RadzenLabel Text="Payment history is clean (no late payments)" />
+                </RadzenStack>
+            </RadzenStack>
+
+            <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-2">Credit Accounts</RadzenText>
+
+            @foreach (var row in accountRows)
+            {
+                <RadzenCard Variant="Variant.Outlined" class="rz-mb-2">
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
+                        <div>
+                            <RadzenLabel Text="Linked Debt" />
+                            <RadzenDropDown @bind-Value="row.DebtAccountId"
+                                            Data="@debtDropdownItems"
+                                            ValueProperty="Value"
+                                            TextProperty="Label"
+                                            Style="display:block; width:180px;" />
+                        </div>
+                        @if (string.IsNullOrEmpty(row.DebtAccountId))
+                        {
+                            <div>
+                                <RadzenLabel Text="Name" />
+                                <RadzenTextBox @bind-Value="row.Name" Placeholder="e.g. Visa" Style="display:block; width:140px;" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div>
+                                <RadzenLabel Text="Name" />
+                                <RadzenText Style="color: var(--rz-text-secondary-color); padding-top: 8px;">auto</RadzenText>
+                            </div>
+                        }
+                        <div>
+                            <RadzenLabel Text="Type" />
+                            <RadzenDropDown @bind-Value="row.AccountType"
+                                            Data="@creditAccountTypes"
+                                            Style="display:block; width:130px;" />
+                        </div>
+                        <div>
+                            <RadzenLabel Text="Limit ($)" />
+                            <RadzenNumeric @bind-Value="row.CreditLimit" Min="0m" Step="0.01m" Format="F2" Style="display:block; width:110px;" />
+                        </div>
+                        @if (string.IsNullOrEmpty(row.DebtAccountId))
+                        {
+                            <div>
+                                <RadzenLabel Text="Balance ($)" />
+                                <RadzenNumeric @bind-Value="row.CurrentBalance" Min="0m" Step="0.01m" Format="F2" Style="display:block; width:110px;" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div>
+                                <RadzenLabel Text="Balance ($)" />
+                                <RadzenText Style="color: var(--rz-text-secondary-color); padding-top: 8px;">from debt</RadzenText>
+                            </div>
+                        }
+                        <div>
+                            <RadzenLabel Text="Age (mo)" />
+                            <RadzenNumeric @bind-Value="row.AgeMonths" Min="0" Style="display:block; width:90px;" />
+                        </div>
+                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small"
+                                      Click="@(() => accountRows.Remove(row))" />
+                    </RadzenStack>
+                </RadzenCard>
+            }
+
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" class="rz-mt-2">
+                <RadzenButton Text="+ Add Account" Icon="add" ButtonStyle="ButtonStyle.Light" Click="@AddRow" />
+                <RadzenButton Text="Save Profile" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="@SaveProfile" />
+                @if (profile is not null)
+                {
+                    <RadzenButton Text="Delete Profile" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="@DeleteProfile" />
+                }
+            </RadzenStack>
+        </RadzenCard>
+
+        <!-- Score Projection -->
+        @if (profile is not null)
+        {
+            <div class="rz-mb-3">
+                <RadzenButton Text="Run Score Projection" Icon="insights" ButtonStyle="ButtonStyle.Secondary"
+                              Click="@RunProjection" IsBusy="@projectionLoading" />
+            </div>
+        }
+
+        @if (projectionResult is not null)
+        {
+            <RadzenCard class="rz-mb-4">
+                <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Score Projection</RadzenText>
+                <RadzenText class="rz-mb-3">
+                    Base range: <strong>@projectionResult.BaseScoreRangeLow – @projectionResult.BaseScoreRangeHigh</strong>
+                </RadzenText>
+
+                <RadzenDataGrid Data="@projectionResult.Months" TItem="CreditScoreMonthDto" AllowSorting="false" AllowColumnResize="true">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="CreditScoreMonthDto" Property="Month" Title="Month" Width="80px" />
+                        <RadzenDataGridColumn TItem="CreditScoreMonthDto" Property="ScoreRangeLow" Title="Score Low" />
+                        <RadzenDataGridColumn TItem="CreditScoreMonthDto" Property="ScoreRangeHigh" Title="Score High" />
+                        <RadzenDataGridColumn TItem="CreditScoreMonthDto" Title="Utilization">
+                            <Template Context="m">@m.Utilization.ToString("P1")</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="CreditScoreMonthDto" Title="Delta">
+                            <Template Context="m">
+                                <span style="color:@(m.ScoreDelta >= 0 ? "var(--rz-success)" : "var(--rz-danger)"); font-weight:bold;">
+                                    @(m.ScoreDelta >= 0 ? "+" : "")@m.ScoreDelta
+                                </span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </RadzenCard>
+        }
+    }
+}
+
+<!-- Assumptions panel -->
+<RadzenCard Style="border: 1px solid var(--rz-warning); background: var(--rz-warning-lighter);" class="rz-mt-4">
+    <RadzenText TextStyle="TextStyle.Subtitle1"><strong>Assumptions &amp; Limitations</strong></RadzenText>
+    <ul style="margin-top: 8px;">
+        <li>Score estimates are approximations based on three factors only: credit utilization, average account age, and payment history.</li>
+        <li>Revolving balances are projected from your debt payoff plan. Installment account balances are assumed static.</li>
+        <li>Standalone revolving accounts are assumed paid off (zero balance) once your payoff plan completes.</li>
+        <li>New hard inquiries, account closures, credit mix changes, and public records are <strong>not modeled</strong>.</li>
+        <li>Score ranges are estimates — your actual score may differ significantly.</li>
+        <li>This tool is for educational planning purposes only and is not financial advice.</li>
+    </ul>
+</RadzenCard>
+
+@code {
+    private List<ScenarioDto> scenarios = [];
+    private List<DebtAccountDto> scenarioDebts = [];
+    private Guid selectedScenarioId;
+    private CreditProfileDto? profile;
+    private List<AccountFormRow> accountRows = [];
+    private int formScoreLow = 600;
+    private int formScoreHigh = 650;
+    private bool formHistoryIsClean = true;
+    private CreditScoreProjectionDto? projectionResult;
+    private bool loading = true;
+    private bool projectionLoading;
+
+    // For RadzenDropDown binding with a null/empty sentinel
+    private List<DebtDropdownItem> debtDropdownItems = [];
+    private IEnumerable<CreditAccountType> creditAccountTypes = Enum.GetValues<CreditAccountType>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        scenarios = await ScenariosApi.GetAllAsync();
+        loading = false;
+    }
+
+    private async Task OnScenarioChanged(object value)
+    {
+        projectionResult = null;
+        if (value is not Guid id || id == Guid.Empty)
+        {
+            selectedScenarioId = Guid.Empty;
+            scenarioDebts = [];
+            debtDropdownItems = [];
+            profile = null;
+            accountRows = [];
+            return;
+        }
+
+        selectedScenarioId = id;
+        var allDebts = await DebtsApi.GetAllAsync();
+        scenarioDebts = allDebts;
+        debtDropdownItems = new List<DebtDropdownItem> { new("", "— standalone —") }
+            .Concat(allDebts.Select(d => new DebtDropdownItem(d.Id.ToString(), d.Name)))
+            .ToList();
+
+        profile = await CreditApi.GetProfileAsync(id);
+        PopulateForm(profile);
+    }
+
+    private void PopulateForm(CreditProfileDto? p)
+    {
+        if (p is null)
+        {
+            formScoreLow = 600;
+            formScoreHigh = 650;
+            formHistoryIsClean = true;
+            accountRows = [];
+            return;
+        }
+
+        formScoreLow = p.CurrentScoreRangeLow;
+        formScoreHigh = p.CurrentScoreRangeHigh;
+        formHistoryIsClean = p.PaymentHistoryIsClean;
+        accountRows = p.Accounts.Select(a => new AccountFormRow
+        {
+            DebtAccountId = a.DebtAccountId?.ToString() ?? "",
+            Name = a.Name,
+            AccountType = a.AccountType,
+            CreditLimit = a.CreditLimit,
+            CurrentBalance = a.CurrentBalance,
+            AgeMonths = a.AgeMonths
+        }).ToList();
+    }
+
+    private void AddRow() => accountRows.Add(new AccountFormRow());
+
+    private async Task SaveProfile()
+    {
+        try
+        {
+            var req = new CreateCreditProfileRequest(
+                formScoreLow,
+                formScoreHigh,
+                formHistoryIsClean,
+                accountRows.Select(r => new CreditAccountProfileRequest(
+                    string.IsNullOrEmpty(r.DebtAccountId) ? null : Guid.Parse(r.DebtAccountId),
+                    r.Name,
+                    r.CreditLimit,
+                    r.CurrentBalance,
+                    r.AgeMonths,
+                    r.AccountType)).ToList());
+
+            profile = await CreditApi.UpsertProfileAsync(selectedScenarioId, req);
+            projectionResult = null;
+            NotificationService.Notify(NotificationSeverity.Success, "Saved", "Credit profile saved.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private async Task DeleteProfile()
+    {
+        try
+        {
+            await CreditApi.DeleteProfileAsync(selectedScenarioId);
+            profile = null;
+            projectionResult = null;
+            accountRows = [];
+            NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Credit profile removed.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private async Task RunProjection()
+    {
+        projectionLoading = true;
+        try
+        {
+            projectionResult = await CreditApi.GetProjectionAsync(selectedScenarioId);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+        finally
+        {
+            projectionLoading = false;
+        }
+    }
+
+    private sealed class AccountFormRow
+    {
+        public string DebtAccountId { get; set; } = "";
+        public string Name { get; set; } = "";
+        public CreditAccountType AccountType { get; set; } = CreditAccountType.Revolving;
+        public decimal CreditLimit { get; set; }
+        public decimal CurrentBalance { get; set; }
+        public int AgeMonths { get; set; }
+    }
+
+    private sealed record DebtDropdownItem(string Value, string Label);
+}

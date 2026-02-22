@@ -1,0 +1,35 @@
+@inherits LayoutComponentBase
+@using Ledgerly.Contracts.Auth
+@using Ledgerly.Web.Auth
+@inject AuthTokenService AuthTokenService
+@inject IJSRuntime JS
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<RadzenComponents />
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var token = await JS.InvokeAsync<string?>("localStorage.getItem", "authToken");
+        var email = await JS.InvokeAsync<string?>("localStorage.getItem", "authEmail");
+
+        if (token is not null && email is not null && !AuthTokenService.IsAuthenticated)
+        {
+            AuthTokenService.SetToken(new AuthTokenDto(token, email, default));
+            StateHasChanged();
+        }
+    }
+}

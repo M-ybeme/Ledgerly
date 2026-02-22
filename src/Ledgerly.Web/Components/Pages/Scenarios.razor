@@ -1,0 +1,512 @@
+@page "/scenarios"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Ledgerly.Contracts.Debts
+@using Ledgerly.Contracts.Scenarios
+@using Ledgerly.Domain.Scenarios
+@using Ledgerly.Web.Components.Dialogs
+@inject Ledgerly.Web.Services.ScenariosApiClient ScenariosApi
+@inject Ledgerly.Web.Services.DebtAccountsApiClient DebtsApi
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+<PageTitle>Scenarios — Ledgerly</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4">Payoff Scenarios</RadzenText>
+
+<!-- ── Create Scenario ──────────────────────────────────────────── -->
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Create Scenario</RadzenText>
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap" class="rz-mb-3">
+        <div>
+            <RadzenLabel Text="Name" />
+            <RadzenTextBox @bind-Value="formName" Placeholder="e.g. Aggressive Payoff" Style="display:block; width:200px;" />
+        </div>
+        <div>
+            <RadzenLabel Text="Extra Monthly Payment ($)" />
+            <RadzenNumeric @bind-Value="formExtra" Min="0m" Step="0.01m" Format="F2" Style="display:block; width:160px;" />
+        </div>
+        <div>
+            <RadzenLabel Text="Strategy" />
+            <RadzenDropDown @bind-Value="formStrategy" Data="@strategies" Style="display:block; width:160px;" />
+        </div>
+    </RadzenStack>
+
+    @if (allDebts is not null && allDebts.Count > 0)
+    {
+        <div class="rz-mb-3">
+            <RadzenLabel Text="Include Debts" />
+            <RadzenDropDown @bind-Value="selectedDebtIds"
+                            Data="@allDebts"
+                            ValueProperty="Id"
+                            TextProperty="Name"
+                            Multiple="true"
+                            Placeholder="Select debts…"
+                            Style="display:block; width:100%; max-width:500px;" />
+        </div>
+    }
+    else if (allDebts is not null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" AllowClose="false" class="rz-mb-3">Add some debt accounts first before creating a scenario.</RadzenAlert>
+    }
+
+    <RadzenButton Text="Create Scenario" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="@CreateScenario" />
+</RadzenCard>
+
+<!-- ── Scenarios List ───────────────────────────────────────────── -->
+<RadzenText TextStyle="TextStyle.H5" class="rz-mb-3">Scenarios</RadzenText>
+
+@if (scenarios is null)
+{
+    <RadzenText>Loading…</RadzenText>
+}
+else if (scenarios.Count == 0)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No scenarios yet. Create one above.</RadzenAlert>
+}
+else
+{
+    @foreach (var scenario in scenarios)
+    {
+        <RadzenCard class="rz-mb-3">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem" Wrap="FlexWrap.Wrap" class="rz-mb-2">
+                <RadzenText TextStyle="TextStyle.H6" Style="margin:0;">@scenario.Name</RadzenText>
+                <RadzenBadge Text="@scenario.Strategy.ToString()" BadgeStyle="BadgeStyle.Info" />
+                <RadzenText>Extra: <b>@scenario.ExtraMonthlyPayment.ToString("C")/mo</b></RadzenText>
+                <RadzenText>Debts: <b>@string.Join(", ", scenario.DebtAccounts.Select(d => d.Name))</b></RadzenText>
+                <RadzenButton Text="Run Projection" Icon="play_arrow" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                              Click="@(() => RunProjection(scenario.Id))" />
+                <RadzenButton Text="Duplicate" Icon="content_copy" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                              Click="@(() => DuplicateScenario(scenario.Id))" />
+                <RadzenButton Text="Drift" Icon="trending_up" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
+                              Click="@(() => LoadDrift(scenario.Id))"
+                              IsBusy="@(loadingDrift.TryGetValue(scenario.Id, out var ld) && ld)" />
+            </RadzenStack>
+
+            @if (projectionResults.TryGetValue(scenario.Id, out var result))
+            {
+                <RadzenCard Variant="Variant.Outlined" class="rz-mt-3">
+                    <RadzenText>
+                        <b>Paid off in @result.TotalMonths months</b> —
+                        Total paid: @result.TotalPaid.ToString("C") —
+                        Total interest: @result.TotalInterestPaid.ToString("C")
+                    </RadzenText>
+
+                    @* Month-by-month breakdown (dynamic columns — plain table) *@
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mt-2 rz-mb-2">
+                        <RadzenText TextStyle="TextStyle.Subtitle2">Month-by-month breakdown</RadzenText>
+                        <RadzenButton Text="@(showBreakdownSet.Contains(scenario.Id) ? "Hide" : "Show")"
+                                      ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                      Click="@(() => ToggleBreakdown(scenario.Id))" />
+                    </RadzenStack>
+
+                    @if (showBreakdownSet.Contains(scenario.Id))
+                    {
+                        <div style="overflow-x:auto; max-height:400px; overflow-y:auto;">
+                            <table style="border-collapse:collapse; font-size:0.875em; width:100%;">
+                                <thead>
+                                    <tr style="border-bottom:2px solid var(--rz-border-color); background:var(--rz-base-background-color);">
+                                        <th style="padding:4px 8px; text-align:left;">Month</th>
+                                        @foreach (var debt in result.Months.FirstOrDefault()?.Debts ?? [])
+                                        {
+                                            <th style="padding:4px 8px;">@debt.Name — Balance</th>
+                                            <th style="padding:4px 8px;">Interest</th>
+                                            <th style="padding:4px 8px;">Principal</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var month in result.Months)
+                                    {
+                                        <tr style="border-bottom:1px solid var(--rz-border-color);">
+                                            <td style="padding:4px 8px;">@month.Month</td>
+                                            @foreach (var d in month.Debts)
+                                            {
+                                                <td style="padding:4px 8px;">@d.RemainingBalance.ToString("C")</td>
+                                                <td style="padding:4px 8px; color:var(--rz-danger);">@d.InterestPaid.ToString("C")</td>
+                                                <td style="padding:4px 8px; color:var(--rz-success);">@d.PrincipalPaid.ToString("C")</td>
+                                            }
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    @* This Month panel *@
+                    @{
+                        int currentMonth = GetCurrentMonth(scenario);
+                        int thisMonthIdx = Math.Min(currentMonth, result.Months.Count - 1);
+                    }
+                    @if (thisMonthIdx >= 0)
+                    {
+                        var snap = result.Months[thisMonthIdx];
+                        <RadzenCard Variant="Variant.Outlined" class="rz-mt-3">
+                            <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-2"><b>Month @(currentMonth + 1) — This Month's Plan</b></RadzenText>
+                            <RadzenDataGrid Data="@snap.Debts" TItem="DebtSnapshotDto" AllowSorting="false">
+                                <Columns>
+                                    <RadzenDataGridColumn TItem="DebtSnapshotDto" Property="Name" Title="Debt" />
+                                    <RadzenDataGridColumn TItem="DebtSnapshotDto" Title="Planned">
+                                        <Template Context="ds">@((ds.InterestPaid + ds.PrincipalPaid).ToString("C"))</Template>
+                                    </RadzenDataGridColumn>
+                                    <RadzenDataGridColumn TItem="DebtSnapshotDto" Title="Logged">
+                                        <Template Context="ds">
+                                            @{
+                                                var logged = GetLoggedAmount(scenario.Id, ds.DebtAccountId, currentMonth + 1, scenario.CreatedUtc);
+                                                var planned = ds.InterestPaid + ds.PrincipalPaid;
+                                                var logColor = logged >= planned ? "var(--rz-success)" : logged > 0 ? "orange" : "var(--rz-text-secondary-color)";
+                                            }
+                                            <span style="color:@logColor;">@(logged > 0 ? logged.ToString("C") : "—")</span>
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                    <RadzenDataGridColumn TItem="DebtSnapshotDto" Title="" Sortable="false" Width="140px">
+                                        <Template Context="ds">
+                                            <RadzenButton Text="Log Payment" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                          Click="@(() => OpenLogPayment(scenario.Id, ds.DebtAccountId))" />
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                </Columns>
+                            </RadzenDataGrid>
+                        </RadzenCard>
+                    }
+                </RadzenCard>
+            }
+
+            @* Drift panel *@
+            @if (driftResults.TryGetValue(scenario.Id, out var drift))
+            {
+                var driftColor = drift.MonthsDrift > 0 ? "var(--rz-success)" : drift.MonthsDrift < 0 ? "var(--rz-danger)" : "var(--rz-text-color)";
+                var monthsAbs = Math.Abs(drift.MonthsDrift);
+                var driftLabel = drift.MonthsDrift > 0
+                    ? $"{monthsAbs} month{(monthsAbs == 1 ? "" : "s")} ahead of schedule"
+                    : drift.MonthsDrift < 0
+                    ? $"{monthsAbs} month{(monthsAbs == 1 ? "" : "s")} behind schedule"
+                    : "On track";
+
+                <RadzenCard Variant="Variant.Outlined" class="rz-mt-3">
+                    <span style="color:@driftColor; font-weight:bold; font-size:1.05em; display:block; margin-bottom:4px;">@driftLabel</span>
+                    <RadzenText class="rz-mb-2">
+                        Updated payoff: <b>@drift.UpdatedTotalMonths months</b>
+                        (originally @drift.OriginalTotalMonths months)
+                        @if (drift.TotalInterestSaved != 0)
+                        {
+                            var interestLabel = drift.TotalInterestSaved > 0 ? "saved" : "extra";
+                            <span> — Interest @interestLabel: @Math.Abs(drift.TotalInterestSaved).ToString("C")</span>
+                        }
+                    </RadzenText>
+
+                    <RadzenDataGrid Data="@drift.Debts" TItem="DebtDriftDto" AllowSorting="false">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="DebtDriftDto" Property="Name" Title="Debt" />
+                            <RadzenDataGridColumn TItem="DebtDriftDto" Title="Projected Balance">
+                                <Template Context="dd">@dd.ProjectedBalance.ToString("C")</Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="DebtDriftDto" Title="Actual Balance">
+                                <Template Context="dd">@dd.ActualBalance.ToString("C")</Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="DebtDriftDto" Title="Drift">
+                                <Template Context="dd">
+                                    <span style="color:@(dd.IsOnTrack ? "var(--rz-success)" : "var(--rz-danger)"); font-weight:bold;">
+                                        @(dd.BalanceDrift >= 0 ? "-" : "+")@Math.Abs(dd.BalanceDrift).ToString("C")
+                                    </span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="DebtDriftDto" Title="Status">
+                                <Template Context="dd">
+                                    <RadzenBadge Text="@(dd.IsOnTrack ? "On Track" : "Behind")"
+                                                 BadgeStyle="@(dd.IsOnTrack ? BadgeStyle.Success : BadgeStyle.Danger)" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </RadzenCard>
+            }
+        </RadzenCard>
+    }
+}
+
+<!-- ── Compare Scenarios ────────────────────────────────────────── -->
+@if (scenarios is not null && scenarios.Count >= 2)
+{
+    <RadzenCard class="rz-mt-4">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Compare Scenarios</RadzenText>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap" class="rz-mb-3">
+            <div>
+                <RadzenLabel Text="Scenario A" />
+                <RadzenDropDown @bind-Value="compareIdA"
+                                Data="@scenarios"
+                                ValueProperty="Id"
+                                TextProperty="Name"
+                                Placeholder="— select —"
+                                Style="display:block; width:200px;" />
+            </div>
+            <div>
+                <RadzenLabel Text="Scenario B" />
+                <RadzenDropDown @bind-Value="compareIdB"
+                                Data="@scenarios"
+                                ValueProperty="Id"
+                                TextProperty="Name"
+                                Placeholder="— select —"
+                                Style="display:block; width:200px;" />
+            </div>
+            <RadzenButton Text="Compare" Icon="compare_arrows" ButtonStyle="ButtonStyle.Primary"
+                          Click="@RunComparison" IsBusy="@loadingComparison" />
+        </RadzenStack>
+
+        @if (comparisonResult is not null)
+        {
+            var a = comparisonResult.ScenarioA;
+            var b = comparisonResult.ScenarioB;
+
+            <RadzenCard Variant="Variant.Outlined">
+                @if (comparisonResult.WinnerLabel == "Equal")
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false" class="rz-mb-3">
+                        These scenarios are equivalent — same interest paid and same payoff timeline.
+                    </RadzenAlert>
+                }
+                else
+                {
+                    var interestAbs = Math.Abs(comparisonResult.InterestSaved);
+                    var monthsAbs2 = Math.Abs(comparisonResult.MonthsSaved);
+                    <RadzenAlert AlertStyle="AlertStyle.Success" AllowClose="false" class="rz-mb-3">
+                        Winner: <b>@comparisonResult.WinnerLabel</b>
+                        — saves @interestAbs.ToString("C") in interest
+                        @if (monthsAbs2 > 0)
+                        {
+                            <span> and @monthsAbs2 month@(monthsAbs2 == 1 ? "" : "s") faster</span>
+                        }
+                    </RadzenAlert>
+                }
+
+                <table style="border-collapse:collapse; width:100%; max-width:750px;">
+                    <thead>
+                        <tr style="border-bottom:2px solid var(--rz-border-color); text-align:left;">
+                            <th style="padding:6px 12px;">Metric</th>
+                            <th style="padding:6px 12px;">@a.ScenarioName</th>
+                            <th style="padding:6px 12px;">@b.ScenarioName</th>
+                            <th style="padding:6px 12px;">Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-bottom:1px solid var(--rz-border-color);">
+                            <td style="padding:6px 12px;">Strategy</td>
+                            <td style="padding:6px 12px;">@a.Strategy</td>
+                            <td style="padding:6px 12px;">@b.Strategy</td>
+                            <td style="padding:6px 12px;"></td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--rz-border-color);">
+                            <td style="padding:6px 12px;">Extra Payment</td>
+                            <td style="padding:6px 12px;">@a.ExtraMonthlyPayment.ToString("C")/mo</td>
+                            <td style="padding:6px 12px;">@b.ExtraMonthlyPayment.ToString("C")/mo</td>
+                            <td style="padding:6px 12px;"></td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--rz-border-color);">
+                            <td style="padding:6px 12px;">Months to Pay Off</td>
+                            <td style="padding:6px 12px;">@a.TotalMonths</td>
+                            <td style="padding:6px 12px;">@b.TotalMonths</td>
+                            <td style="padding:6px 12px;">
+                                @{
+                                    var mDiff = comparisonResult.MonthsSaved;
+                                    if (mDiff > 0) { <span style="color:var(--rz-success); font-weight:bold;">B @mDiff mo faster</span> }
+                                    else if (mDiff < 0) { <span style="color:var(--rz-success); font-weight:bold;">A @(-mDiff) mo faster</span> }
+                                    else { <span style="color:gray;">Equal</span> }
+                                }
+                            </td>
+                        </tr>
+                        <tr style="border-bottom:1px solid var(--rz-border-color);">
+                            <td style="padding:6px 12px;">Total Interest</td>
+                            <td style="padding:6px 12px;">@a.TotalInterestPaid.ToString("C")</td>
+                            <td style="padding:6px 12px;">@b.TotalInterestPaid.ToString("C")</td>
+                            <td style="padding:6px 12px;">
+                                @{
+                                    var iDiff = comparisonResult.InterestSaved;
+                                    if (iDiff > 0) { <span style="color:var(--rz-success); font-weight:bold;">B saves @iDiff.ToString("C")</span> }
+                                    else if (iDiff < 0) { <span style="color:var(--rz-success); font-weight:bold;">A saves @(-iDiff).ToString("C")</span> }
+                                    else { <span style="color:gray;">Equal</span> }
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 12px;">Total Paid</td>
+                            <td style="padding:6px 12px;">@a.TotalPaid.ToString("C")</td>
+                            <td style="padding:6px 12px;">@b.TotalPaid.ToString("C")</td>
+                            <td style="padding:6px 12px;"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </RadzenCard>
+        }
+    </RadzenCard>
+}
+
+@code {
+    private List<ScenarioDto>? scenarios;
+    private List<DebtAccountDto>? allDebts;
+    private IEnumerable<Guid> selectedDebtIds = [];
+
+    private string formName = "";
+    private decimal formExtra;
+    private PayoffStrategy formStrategy = PayoffStrategy.Avalanche;
+    private IEnumerable<PayoffStrategy> strategies = Enum.GetValues<PayoffStrategy>();
+
+    private Dictionary<Guid, ProjectionResultDto> projectionResults = [];
+    private HashSet<Guid> showBreakdownSet = [];
+
+    private Dictionary<Guid, List<ActualPaymentDto>> scenarioPayments = [];
+    private Dictionary<Guid, DriftSummaryDto> driftResults = [];
+    private Dictionary<Guid, bool> loadingDrift = [];
+
+    private Guid compareIdA;
+    private Guid compareIdB;
+    private ScenarioComparisonDto? comparisonResult;
+    private bool loadingComparison;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var scenariosTask = ScenariosApi.GetAllAsync();
+        var debtsTask = DebtsApi.GetAllAsync();
+        await Task.WhenAll(scenariosTask, debtsTask);
+        scenarios = await scenariosTask;
+        allDebts = await debtsTask;
+    }
+
+    private async Task CreateScenario()
+    {
+        try
+        {
+            var created = await ScenariosApi.CreateAsync(
+                new CreateScenarioRequest(formName, formExtra, formStrategy, [..selectedDebtIds]));
+            scenarios ??= [];
+            scenarios.Add(created);
+            formName = "";
+            formExtra = 0;
+            formStrategy = PayoffStrategy.Avalanche;
+            selectedDebtIds = [];
+            NotificationService.Notify(NotificationSeverity.Success, "Created", $"Scenario \"{created.Name}\" created.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private async Task DuplicateScenario(Guid scenarioId)
+    {
+        try
+        {
+            var copy = await ScenariosApi.DuplicateAsync(scenarioId);
+            scenarios ??= [];
+            scenarios.Add(copy);
+            NotificationService.Notify(NotificationSeverity.Success, "Duplicated", $"Scenario \"{copy.Name}\" created.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private async Task RunProjection(Guid scenarioId)
+    {
+        projectionResults.Remove(scenarioId);
+        try
+        {
+            var result = await ScenariosApi.GetProjectionAsync(scenarioId);
+            projectionResults[scenarioId] = result;
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private void ToggleBreakdown(Guid scenarioId)
+    {
+        if (!showBreakdownSet.Add(scenarioId))
+            showBreakdownSet.Remove(scenarioId);
+    }
+
+    private async Task RunComparison()
+    {
+        comparisonResult = null;
+        if (compareIdA == Guid.Empty || compareIdB == Guid.Empty)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Select Scenarios", "Please select both scenarios to compare.");
+            return;
+        }
+        if (compareIdA == compareIdB)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Select Scenarios", "Select two different scenarios to compare.");
+            return;
+        }
+
+        loadingComparison = true;
+        try
+        {
+            comparisonResult = await ScenariosApi.CompareAsync(compareIdA, compareIdB);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+        finally
+        {
+            loadingComparison = false;
+        }
+    }
+
+    private static int GetCurrentMonth(ScenarioDto scenario)
+    {
+        var start = DateOnly.FromDateTime(scenario.CreatedUtc.ToUniversalTime().Date);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        return (today.Year - start.Year) * 12 + (today.Month - start.Month);
+    }
+
+    private decimal GetLoggedAmount(Guid scenarioId, Guid debtId, int monthNumber, DateTime scenarioCreatedUtc)
+    {
+        if (!scenarioPayments.TryGetValue(scenarioId, out var payments)) return 0m;
+        var start = DateOnly.FromDateTime(scenarioCreatedUtc.ToUniversalTime().Date);
+        return payments
+            .Where(p => p.DebtAccountId == debtId)
+            .Where(p => (p.PaymentDate.Year - start.Year) * 12 + (p.PaymentDate.Month - start.Month) + 1 == monthNumber)
+            .Sum(p => p.Amount);
+    }
+
+    private async Task OpenLogPayment(Guid scenarioId, Guid debtId)
+    {
+        var result = await DialogService.OpenAsync<LogPaymentDialog>(
+            "Log Payment",
+            new Dictionary<string, object?>
+            {
+                { nameof(LogPaymentDialog.ScenarioId), scenarioId },
+                { nameof(LogPaymentDialog.DebtAccountId), debtId }
+            });
+
+        if (result is true)
+        {
+            scenarioPayments[scenarioId] = await ScenariosApi.GetPaymentsAsync(scenarioId);
+            driftResults.Remove(scenarioId);
+        }
+    }
+
+    private async Task LoadDrift(Guid scenarioId)
+    {
+        loadingDrift[scenarioId] = true;
+        try
+        {
+            if (!scenarioPayments.ContainsKey(scenarioId))
+                scenarioPayments[scenarioId] = await ScenariosApi.GetPaymentsAsync(scenarioId);
+
+            var drift = await ScenariosApi.GetDriftAsync(scenarioId);
+            driftResults[scenarioId] = drift;
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+        finally
+        {
+            loadingDrift[scenarioId] = false;
+        }
+    }
+}

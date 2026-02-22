@@ -1,0 +1,72 @@
+@page "/register"
+@rendermode InteractiveServer
+@using Ledgerly.Contracts.Auth
+@inject Ledgerly.Web.Services.AuthApiClient AuthApi
+@inject NavigationManager Nav
+
+<PageTitle>Register — Ledgerly</PageTitle>
+
+<div style="max-width:400px; margin:80px auto;">
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.H5" style="margin-bottom:1.5rem;">Create an Account</RadzenText>
+
+        @if (errorMessage is not null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="false" style="margin-bottom:1rem;">@errorMessage</RadzenAlert>
+        }
+        @if (success)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Success" ShowIcon="false" style="margin-bottom:1rem;">
+                Registration successful! Please check your email to confirm your account before logging in.
+            </RadzenAlert>
+        }
+        else
+        {
+            <div style="margin-bottom:1rem;">
+                <RadzenLabel Text="Email" />
+                <RadzenTextBox @bind-Value="email" Placeholder="@emailPlaceholder" Style="display:block; width:100%;" />
+            </div>
+            <div style="margin-bottom:0.75rem;">
+                <RadzenLabel Text="Password" />
+                <RadzenPassword @bind-Value="password" Style="display:block; width:100%;" />
+            </div>
+            <div style="margin-bottom:1.5rem; font-size:0.85em; color:var(--rz-text-secondary-color);">
+                Minimum 8 characters, must include a digit.
+            </div>
+
+            <RadzenButton Text="Create Account" ButtonStyle="ButtonStyle.Primary" Style="width:100%;" Click="@Submit" Disabled="@loading" />
+        }
+
+        <div style="margin-top:1rem; text-align:center; font-size:0.9em;">
+            Already have an account? <a href="/login">Sign in</a>
+        </div>
+    </RadzenCard>
+</div>
+
+@code {
+    private readonly string emailPlaceholder = "you@example.com";
+    private string email = "";
+    private string password = "";
+    private string? errorMessage;
+    private bool loading;
+    private bool success;
+
+    private async Task Submit()
+    {
+        errorMessage = null;
+        loading = true;
+        try
+        {
+            await AuthApi.RegisterAsync(new RegisterRequest(email, password));
+            success = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

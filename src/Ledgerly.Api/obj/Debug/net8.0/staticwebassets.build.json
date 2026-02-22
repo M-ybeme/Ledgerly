@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "X7AtR3RBineXIVrn+dDQYg94TS7BjKlayNyxSpN5RQs=",
+  "Source": "Ledgerly.Api",
+  "BasePath": "_content/Ledgerly.Api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

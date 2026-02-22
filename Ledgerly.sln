@@ -1,0 +1,62 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{F0AD30F6-B259-421C-9004-B85B4F696DD5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ledgerly.Api", "src\Ledgerly.Api\Ledgerly.Api.csproj", "{398DE59E-D280-4E90-A8D0-1687DE8AC58B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ledgerly.Web", "src\Ledgerly.Web\Ledgerly.Web.csproj", "{C9BF31A6-B1AA-49D6-B6DF-B3C9E1B8AA9B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ledgerly.Domain", "src\Ledgerly.Domain\Ledgerly.Domain.csproj", "{2152254F-4D7D-4B01-ADD1-BA7622ED39A8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ledgerly.Application", "src\Ledgerly.Application\Ledgerly.Application.csproj", "{8BDD6991-2337-4736-8431-77B1FF5A174D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ledgerly.Infrastructure", "src\Ledgerly.Infrastructure\Ledgerly.Infrastructure.csproj", "{E7491C8D-D4FC-476E-AE2C-5C313CA58576}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ledgerly.Contracts", "src\Ledgerly.Contracts\Ledgerly.Contracts.csproj", "{38F370F7-698A-4633-A4EE-33CFF170743E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{398DE59E-D280-4E90-A8D0-1687DE8AC58B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{398DE59E-D280-4E90-A8D0-1687DE8AC58B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{398DE59E-D280-4E90-A8D0-1687DE8AC58B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{398DE59E-D280-4E90-A8D0-1687DE8AC58B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9BF31A6-B1AA-49D6-B6DF-B3C9E1B8AA9B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9BF31A6-B1AA-49D6-B6DF-B3C9E1B8AA9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9BF31A6-B1AA-49D6-B6DF-B3C9E1B8AA9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9BF31A6-B1AA-49D6-B6DF-B3C9E1B8AA9B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2152254F-4D7D-4B01-ADD1-BA7622ED39A8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2152254F-4D7D-4B01-ADD1-BA7622ED39A8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2152254F-4D7D-4B01-ADD1-BA7622ED39A8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2152254F-4D7D-4B01-ADD1-BA7622ED39A8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8BDD6991-2337-4736-8431-77B1FF5A174D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8BDD6991-2337-4736-8431-77B1FF5A174D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8BDD6991-2337-4736-8431-77B1FF5A174D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8BDD6991-2337-4736-8431-77B1FF5A174D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E7491C8D-D4FC-476E-AE2C-5C313CA58576}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E7491C8D-D4FC-476E-AE2C-5C313CA58576}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E7491C8D-D4FC-476E-AE2C-5C313CA58576}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E7491C8D-D4FC-476E-AE2C-5C313CA58576}.Release|Any CPU.Build.0 = Release|Any CPU
+		{38F370F7-698A-4633-A4EE-33CFF170743E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{38F370F7-698A-4633-A4EE-33CFF170743E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{38F370F7-698A-4633-A4EE-33CFF170743E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{38F370F7-698A-4633-A4EE-33CFF170743E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{398DE59E-D280-4E90-A8D0-1687DE8AC58B} = {F0AD30F6-B259-421C-9004-B85B4F696DD5}
+		{C9BF31A6-B1AA-49D6-B6DF-B3C9E1B8AA9B} = {F0AD30F6-B259-421C-9004-B85B4F696DD5}
+		{2152254F-4D7D-4B01-ADD1-BA7622ED39A8} = {F0AD30F6-B259-421C-9004-B85B4F696DD5}
+		{8BDD6991-2337-4736-8431-77B1FF5A174D} = {F0AD30F6-B259-421C-9004-B85B4F696DD5}
+		{E7491C8D-D4FC-476E-AE2C-5C313CA58576} = {F0AD30F6-B259-421C-9004-B85B4F696DD5}
+		{38F370F7-698A-4633-A4EE-33CFF170743E} = {F0AD30F6-B259-421C-9004-B85B4F696DD5}
+	EndGlobalSection
+EndGlobal

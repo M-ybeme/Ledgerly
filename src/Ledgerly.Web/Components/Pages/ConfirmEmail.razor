@@ -1,0 +1,66 @@
+@page "/confirm-email"
+@rendermode InteractiveServer
+@inject Ledgerly.Web.Services.AuthApiClient AuthApi
+@inject NavigationManager Nav
+
+<PageTitle>Confirm Email — Ledgerly</PageTitle>
+
+<div style="max-width:400px; margin:80px auto;">
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.H5" style="margin-bottom:1.5rem;">Email Confirmation</RadzenText>
+
+        @if (checking)
+        {
+            <p>Confirming your email address...</p>
+        }
+        else if (errorMessage is not null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="false" style="margin-bottom:1rem;">@errorMessage</RadzenAlert>
+            <div style="text-align:center; margin-top:1rem;">
+                <a href="/login">Back to Login</a>
+            </div>
+        }
+        else
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Success" ShowIcon="false" style="margin-bottom:1rem;">
+                Your email has been confirmed! You can now log in.
+            </RadzenAlert>
+            <RadzenButton Text="Go to Login" ButtonStyle="ButtonStyle.Primary" Style="width:100%;" Click="@(() => Nav.NavigateTo("/login"))" />
+        }
+    </RadzenCard>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Email { get; set; }
+    [SupplyParameterFromQuery] public string? Token { get; set; }
+
+    private bool checking = true;
+    private string? errorMessage;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        if (string.IsNullOrWhiteSpace(Email) || string.IsNullOrWhiteSpace(Token))
+        {
+            errorMessage = "Invalid confirmation link.";
+            checking = false;
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            await AuthApi.ConfirmEmailAsync(Email, Token);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            checking = false;
+            StateHasChanged();
+        }
+    }
+}

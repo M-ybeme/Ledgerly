@@ -1,0 +1,424 @@
+@page "/budget"
+@rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using Ledgerly.Contracts.Budget
+@using Ledgerly.Domain.Budget
+@inject Ledgerly.Web.Services.BudgetPlansApiClient PlansApi
+@inject Ledgerly.Web.Services.BudgetCategoriesApiClient CategoriesApi
+@inject Ledgerly.Web.Services.TransactionsApiClient TransactionsApi
+@inject NotificationService NotificationService
+
+<PageTitle>Budget — Ledgerly</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4">Budget</RadzenText>
+
+<!-- ── Create Plan ─────────────────────────────────────────────── -->
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Create New Plan</RadzenText>
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap" class="rz-mb-3">
+        <div>
+            <RadzenLabel Text="Name" />
+            <RadzenTextBox @bind-Value="planName" Placeholder="e.g. March 2026" Style="display:block; width:200px;" />
+        </div>
+        <div>
+            <RadzenLabel Text="Start Date" />
+            <RadzenDatePicker @bind-Value="PlanStartDateProxy" DateFormat="yyyy-MM-dd" Style="display:block; width:160px;" />
+        </div>
+        <div>
+            <RadzenLabel Text="End Date" />
+            <RadzenDatePicker @bind-Value="PlanEndDateProxy" DateFormat="yyyy-MM-dd" Style="display:block; width:160px;" />
+        </div>
+    </RadzenStack>
+
+    @if (allCategories is not null && allCategories.Count > 0)
+    {
+        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-2">Planned Amounts per Category</RadzenText>
+        <RadzenStack Gap="0.5rem" class="rz-mb-3">
+            @foreach (var cat in allCategories)
+            {
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
+                    <RadzenText Style="width:200px;">@cat.Name (@cat.Type)</RadzenText>
+                    <RadzenNumeric TValue="decimal" Min="0m" Step="0.01m" Format="F2" Style="width:120px;"
+                                   Value="@GetPlanLineAmount(cat.Id)"
+                                   ValueChanged="@(v => SetPlanLineAmount(cat.Id, v))" />
+                </RadzenStack>
+            }
+        </RadzenStack>
+    }
+
+    <RadzenButton Text="Create Plan" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="@CreatePlan" />
+</RadzenCard>
+
+<!-- ── Plan List ───────────────────────────────────────────────── -->
+@if (plans is null)
+{
+    <RadzenText>Loading…</RadzenText>
+}
+else if (plans.Count == 0)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No budget plans yet. Create one above.</RadzenAlert>
+}
+else
+{
+    <RadzenDataGrid Data="@plans" TItem="BudgetPlanDto" AllowSorting="true" AllowColumnResize="true" class="rz-mb-4">
+        <Columns>
+            <RadzenDataGridColumn TItem="BudgetPlanDto" Property="Name" Title="Name" />
+            <RadzenDataGridColumn TItem="BudgetPlanDto" Title="Period">
+                <Template Context="p">@p.StartDate.ToString("MMM d") – @p.EndDate.ToString("MMM d, yyyy")</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="BudgetPlanDto" Title="# Lines">
+                <Template Context="p">@p.Lines.Count</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="BudgetPlanDto" Title="Actions" Sortable="false" Width="160px">
+                <Template Context="p">
+                    <RadzenButton Text="@(selectedPlan?.Id == p.Id ? "Selected" : "Select")"
+                                  ButtonStyle="@(selectedPlan?.Id == p.Id ? ButtonStyle.Success : ButtonStyle.Light)"
+                                  Size="ButtonSize.Small" Click="@(() => SelectPlan(p))" class="rz-mr-1" />
+                    <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => DeletePlan(p.Id))" />
+                </Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+}
+
+<!-- ── Selected Plan View ──────────────────────────────────────── -->
+@if (selectedPlan is not null)
+{
+    <RadzenText TextStyle="TextStyle.H5" class="rz-mb-3">
+        @selectedPlan.Name — @selectedPlan.StartDate.ToString("MMM d") to @selectedPlan.EndDate.ToString("MMM d, yyyy")
+    </RadzenText>
+
+    <!-- Summary -->
+    <RadzenCard class="rz-mb-4">
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem" class="rz-mb-3">
+            <RadzenText TextStyle="TextStyle.H6">Planned vs Actual</RadzenText>
+            <RadzenButton Text="@(summary is null ? "Load Summary" : "Refresh")" Icon="refresh"
+                          ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                          Click="@LoadSummary" IsBusy="@loadingSummary" />
+        </RadzenStack>
+
+        @if (summary is not null)
+        {
+            <RadzenDataGrid Data="@summary.Categories" TItem="CategorySummaryDto" AllowSorting="true" class="rz-mb-3">
+                <Columns>
+                    <RadzenDataGridColumn TItem="CategorySummaryDto" Property="CategoryName" Title="Category" />
+                    <RadzenDataGridColumn TItem="CategorySummaryDto" Property="Type" Title="Type" />
+                    <RadzenDataGridColumn TItem="CategorySummaryDto" Title="Planned">
+                        <Template Context="c">@c.Planned.ToString("C")</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="CategorySummaryDto" Title="Actual">
+                        <Template Context="c">@c.Actual.ToString("C")</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="CategorySummaryDto" Title="Variance">
+                        <Template Context="c">
+                            @{ var varColor = c.Variance >= 0 ? "var(--rz-success)" : "var(--rz-danger)"; }
+                            <span style="color:@varColor; font-weight:bold;">
+                                @(c.Variance >= 0 ? "+" : "")@c.Variance.ToString("C")
+                            </span>
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+
+            <RadzenCard Variant="Variant.Outlined">
+                <RadzenStack Gap="0.25rem">
+                    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                        <RadzenText><b>Total Income</b></RadzenText>
+                        <RadzenText>@summary.TotalPlannedIncome.ToString("C") planned / @summary.TotalActualIncome.ToString("C") actual</RadzenText>
+                    </RadzenStack>
+                    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                        <RadzenText><b>Total Expenses</b></RadzenText>
+                        <RadzenText>@summary.TotalPlannedExpenses.ToString("C") planned / @summary.TotalActualExpenses.ToString("C") actual</RadzenText>
+                    </RadzenStack>
+                    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
+                        <RadzenText><b>Net</b></RadzenText>
+                        @{ var netColor = summary.NetActual >= 0 ? "var(--rz-success)" : "var(--rz-danger)"; }
+                        <span style="color:@netColor; font-weight:bold;">
+                            @summary.NetPlanned.ToString("C") planned / @summary.NetActual.ToString("C") actual
+                        </span>
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenCard>
+        }
+    </RadzenCard>
+
+    <!-- Transactions -->
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">
+            Transactions (@selectedPlan.StartDate.ToString("MMM d") – @selectedPlan.EndDate.ToString("MMM d, yyyy"))
+        </RadzenText>
+
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap" class="rz-mb-3">
+            <div>
+                <RadzenLabel Text="Description" />
+                <RadzenTextBox @bind-Value="txDescription" Placeholder="e.g. Weekly groceries" Style="display:block; width:200px;" />
+            </div>
+            <div>
+                <RadzenLabel Text="Amount ($)" />
+                <RadzenNumeric @bind-Value="txAmount" Min="0.01m" Step="0.01m" Format="F2" Style="display:block; width:120px;" />
+            </div>
+            <div>
+                <RadzenLabel Text="Date" />
+                <RadzenDatePicker @bind-Value="TxDateProxy" DateFormat="yyyy-MM-dd" Style="display:block; width:160px;" />
+            </div>
+            <div>
+                <RadzenLabel Text="Category" />
+                <RadzenDropDown @bind-Value="txCategoryId"
+                                Data="@allCategories"
+                                ValueProperty="Id"
+                                TextProperty="Name"
+                                Placeholder="— select —"
+                                Style="display:block; width:200px;" />
+            </div>
+            <RadzenButton Text="@(editingTxId.HasValue ? "Update" : "Add")" Icon="@(editingTxId.HasValue ? "save" : "add")"
+                          ButtonStyle="ButtonStyle.Primary" Click="@SaveTransaction" />
+            @if (editingTxId.HasValue)
+            {
+                <RadzenButton Text="Cancel" Icon="cancel" ButtonStyle="ButtonStyle.Light" Click="@CancelTxEdit" />
+            }
+        </RadzenStack>
+
+        @if (transactions is null)
+        {
+            <RadzenText>Loading transactions…</RadzenText>
+        }
+        else if (transactions.Count == 0)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No transactions in this period yet.</RadzenAlert>
+        }
+        else
+        {
+            <RadzenDataGrid Data="@transactions.OrderByDescending(t => t.Date).ToList()" TItem="TransactionDto" AllowSorting="true" AllowColumnResize="true">
+                <Columns>
+                    <RadzenDataGridColumn TItem="TransactionDto" Title="Date">
+                        <Template Context="tx">@tx.Date.ToString("MMM d")</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="TransactionDto" Property="Description" Title="Description" />
+                    <RadzenDataGridColumn TItem="TransactionDto" Title="Category">
+                        <Template Context="tx">@tx.CategoryName (@tx.CategoryType)</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="TransactionDto" Title="Amount">
+                        <Template Context="tx">@tx.Amount.ToString("C")</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="TransactionDto" Title="Actions" Sortable="false" Width="120px">
+                        <Template Context="tx">
+                            <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => StartTxEdit(tx))" class="rz-mr-1" />
+                            <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => DeleteTransaction(tx.Id))" />
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        }
+    </RadzenCard>
+}
+
+@code {
+    // Plans
+    private List<BudgetPlanDto>? plans;
+    private BudgetPlanDto? selectedPlan;
+    private string planName = "";
+    private DateOnly planStartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(-(DateTime.Today.Day - 1)));
+    private DateOnly planEndDate = DateOnly.FromDateTime(new DateTime(DateTime.Today.Year, DateTime.Today.Month, DateTime.DaysInMonth(DateTime.Today.Year, DateTime.Today.Month)));
+    private Dictionary<Guid, decimal> planLineAmounts = [];
+
+    // Categories
+    private List<BudgetCategoryDto>? allCategories;
+
+    // Summary
+    private BudgetSummaryDto? summary;
+    private bool loadingSummary;
+
+    // Transactions
+    private List<TransactionDto>? transactions;
+    private string txDescription = "";
+    private decimal txAmount;
+    private DateOnly txDate = DateOnly.FromDateTime(DateTime.Today);
+    private Guid txCategoryId;
+    private Guid? editingTxId;
+
+    // DateTime proxies for RadzenDatePicker (which uses DateTime, not DateOnly)
+    private DateTime? PlanStartDateProxy
+    {
+        get => planStartDate.ToDateTime(TimeOnly.MinValue);
+        set => planStartDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : planStartDate;
+    }
+    private DateTime? PlanEndDateProxy
+    {
+        get => planEndDate.ToDateTime(TimeOnly.MinValue);
+        set => planEndDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : planEndDate;
+    }
+    private DateTime? TxDateProxy
+    {
+        get => txDate.ToDateTime(TimeOnly.MinValue);
+        set => txDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : txDate;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var plansTask = PlansApi.GetAllAsync();
+        var categoriesTask = CategoriesApi.GetAllAsync();
+        await Task.WhenAll(plansTask, categoriesTask);
+        plans = await plansTask;
+        allCategories = await categoriesTask;
+    }
+
+    private decimal GetPlanLineAmount(Guid categoryId)
+        => planLineAmounts.TryGetValue(categoryId, out var v) ? v : 0m;
+
+    private void SetPlanLineAmount(Guid categoryId, decimal value)
+    {
+        if (value > 0)
+            planLineAmounts[categoryId] = value;
+        else
+            planLineAmounts.Remove(categoryId);
+    }
+
+    private async Task CreatePlan()
+    {
+        try
+        {
+            var lines = planLineAmounts
+                .Where(kvp => kvp.Value > 0)
+                .Select(kvp => new BudgetPlanLineRequest(kvp.Key, kvp.Value))
+                .ToList();
+
+            var created = await PlansApi.CreateAsync(
+                new CreateBudgetPlanRequest(planName, planStartDate, planEndDate, lines));
+
+            plans ??= [];
+            plans.Insert(0, created);
+            planName = "";
+            planLineAmounts = [];
+            NotificationService.Notify(NotificationSeverity.Success, "Created", $"Plan \"{created.Name}\" created.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private async Task SelectPlan(BudgetPlanDto plan)
+    {
+        selectedPlan = plan;
+        summary = null;
+        editingTxId = null;
+        ResetTxForm();
+        await LoadTransactions();
+    }
+
+    private async Task DeletePlan(Guid id)
+    {
+        try
+        {
+            await PlansApi.DeleteAsync(id);
+            plans?.RemoveAll(p => p.Id == id);
+            if (selectedPlan?.Id == id)
+            {
+                selectedPlan = null;
+                summary = null;
+                transactions = null;
+            }
+            NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Plan removed.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private async Task LoadSummary()
+    {
+        loadingSummary = true;
+        try
+        {
+            summary = await PlansApi.GetSummaryAsync(selectedPlan!.Id);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+        finally
+        {
+            loadingSummary = false;
+        }
+    }
+
+    private async Task LoadTransactions()
+    {
+        transactions = null;
+        if (selectedPlan is null) return;
+        transactions = await TransactionsApi.GetAllAsync(selectedPlan.StartDate, selectedPlan.EndDate);
+    }
+
+    private async Task SaveTransaction()
+    {
+        try
+        {
+            if (txCategoryId == Guid.Empty)
+                throw new InvalidOperationException("Please select a category.");
+
+            if (editingTxId.HasValue)
+            {
+                var updated = await TransactionsApi.UpdateAsync(editingTxId.Value,
+                    new UpdateTransactionRequest(txDescription, txAmount, txDate, txCategoryId));
+                var idx = transactions!.FindIndex(t => t.Id == editingTxId.Value);
+                if (idx >= 0) transactions[idx] = updated;
+                NotificationService.Notify(NotificationSeverity.Success, "Updated", "Transaction saved.");
+                CancelTxEdit();
+            }
+            else
+            {
+                var created = await TransactionsApi.CreateAsync(
+                    new CreateTransactionRequest(txDescription, txAmount, txDate, txCategoryId));
+                transactions ??= [];
+                transactions.Add(created);
+                NotificationService.Notify(NotificationSeverity.Success, "Created", "Transaction added.");
+                ResetTxForm();
+            }
+
+            summary = null; // invalidate
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private void StartTxEdit(TransactionDto tx)
+    {
+        editingTxId = tx.Id;
+        txDescription = tx.Description;
+        txAmount = tx.Amount;
+        txDate = tx.Date;
+        txCategoryId = tx.CategoryId;
+    }
+
+    private void CancelTxEdit()
+    {
+        editingTxId = null;
+        ResetTxForm();
+    }
+
+    private void ResetTxForm()
+    {
+        txDescription = "";
+        txAmount = 0;
+        txDate = DateOnly.FromDateTime(DateTime.Today);
+        txCategoryId = Guid.Empty;
+    }
+
+    private async Task DeleteTransaction(Guid id)
+    {
+        try
+        {
+            await TransactionsApi.DeleteAsync(id);
+            transactions?.RemoveAll(t => t.Id == id);
+            summary = null;
+            NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Transaction removed.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+}

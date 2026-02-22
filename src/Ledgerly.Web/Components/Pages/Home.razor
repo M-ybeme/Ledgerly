@@ -1,0 +1,41 @@
+@page "/"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Ledgerly</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4">Welcome to Ledgerly</RadzenText>
+<RadzenText TextStyle="TextStyle.Body1" class="rz-mt-2">
+    Your personal finance dashboard. Use the navigation to manage your accounts, debts, scenarios, budget, and credit profile.
+</RadzenText>
+
+<RadzenStack Orientation="Orientation.Horizontal" Wrap="FlexWrap.Wrap" Gap="1rem" class="rz-mt-6">
+    <RadzenCard Style="width: 200px;">
+        <RadzenText TextStyle="TextStyle.H6">Accounts</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body2">Track your financial accounts.</RadzenText>
+        <RadzenButton Text="Go" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("accounts"))" class="rz-mt-2" />
+    </RadzenCard>
+    <RadzenCard Style="width: 200px;">
+        <RadzenText TextStyle="TextStyle.H6">Debts</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body2">Manage your debts and loans.</RadzenText>
+        <RadzenButton Text="Go" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("debts"))" class="rz-mt-2" />
+    </RadzenCard>
+    <RadzenCard Style="width: 200px;">
+        <RadzenText TextStyle="TextStyle.H6">Scenarios</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body2">Project payoff timelines.</RadzenText>
+        <RadzenButton Text="Go" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("scenarios"))" class="rz-mt-2" />
+    </RadzenCard>
+    <RadzenCard Style="width: 200px;">
+        <RadzenText TextStyle="TextStyle.H6">Budget</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body2">Plan and track spending.</RadzenText>
+        <RadzenButton Text="Go" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("budget"))" class="rz-mt-2" />
+    </RadzenCard>
+    <RadzenCard Style="width: 200px;">
+        <RadzenText TextStyle="TextStyle.H6">Credit</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body2">Estimate score changes.</RadzenText>
+        <RadzenButton Text="Go" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("credit"))" class="rz-mt-2" />
+    </RadzenCard>
+</RadzenStack>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+}
