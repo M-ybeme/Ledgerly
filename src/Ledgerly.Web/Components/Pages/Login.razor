@@ -17,6 +17,10 @@
         {
             <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="false" style="margin-bottom:1rem;">@errorMessage</RadzenAlert>
         }
+        @if (showResend)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="false" style="margin-bottom:1rem;">@resendMessage</RadzenAlert>
+        }
 
         <div style="margin-bottom:1rem;">
             <RadzenLabel Text="Email" />
@@ -28,6 +32,11 @@
         </div>
 
         <RadzenButton Text="Sign In" ButtonStyle="ButtonStyle.Primary" Style="width:100%;" Click="@Submit" Disabled="@loading" />
+
+        @if (emailNotConfirmed)
+        {
+            <RadzenButton Text="Resend confirmation email" ButtonStyle="ButtonStyle.Light" Style="width:100%; margin-top:0.5rem;" Click="@ResendConfirmation" Disabled="@loading" />
+        }
 
         <div style="margin-top:1rem; text-align:center; font-size:0.9em;">
             <a href="/register">Create an account</a> &nbsp;|&nbsp;
@@ -41,11 +50,17 @@
     private string email = "";
     private string password = "";
     private string? errorMessage;
+    private string? resendMessage;
     private bool loading;
+    private bool emailNotConfirmed;
+    private bool showResend;
 
     private async Task Submit()
     {
         errorMessage = null;
+        resendMessage = null;
+        showResend = false;
+        emailNotConfirmed = false;
         loading = true;
         try
         {
@@ -54,6 +69,28 @@
             await JS.InvokeVoidAsync("localStorage.setItem", "authEmail", dto.Email);
             AuthTokenService.SetToken(dto);
             Nav.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            if (ex.Message.Contains("not confirmed", StringComparison.OrdinalIgnoreCase))
+                emailNotConfirmed = true;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task ResendConfirmation()
+    {
+        loading = true;
+        try
+        {
+            await AuthApi.ResendConfirmationAsync(email);
+            resendMessage = "Confirmation email sent — check your inbox (and spam folder).";
+            showResend = true;
+            emailNotConfirmed = false;
         }
         catch (Exception ex)
         {

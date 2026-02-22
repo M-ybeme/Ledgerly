@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\build\Ledgerly.Web.props" />
-</Project>

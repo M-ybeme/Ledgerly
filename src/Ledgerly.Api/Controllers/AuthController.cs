@@ -89,6 +89,24 @@ public sealed class AuthController : ControllerBase
         return Ok(new { message = "Email confirmed. You can now log in." });
     }
 
+    // POST /auth/resend-confirmation
+    [HttpPost("resend-confirmation")]
+    public async Task<IActionResult> ResendConfirmation([FromBody] ForgotPasswordRequest req)
+    {
+        var user = await _userManager.FindByEmailAsync(req.Email);
+        if (user is not null && !await _userManager.IsEmailConfirmedAsync(user))
+        {
+            var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+            var webBase = _config["Web:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5001";
+            var link = $"{webBase}/confirm-email?email={Uri.EscapeDataString(user.Email!)}&token={Uri.EscapeDataString(token)}";
+            await _email.SendAsync(
+                user.Email!,
+                "Confirm your Ledgerly account",
+                $"<p>Welcome to Ledgerly!</p><p>Please confirm your email address by clicking the link below:</p><p><a href=\"{link}\">Confirm Email</a></p>");
+        }
+        return Ok(new { message = "If that email is pending confirmation, a new link has been sent." });
+    }
+
     // POST /auth/forgot-password
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest req)

@@ -45,6 +45,16 @@ public sealed class AuthApiClient
         }
     }
 
+    public async Task ResendConfirmationAsync(string email)
+    {
+        var response = await _http.PostAsJsonAsync("auth/resend-confirmation", new ForgotPasswordRequest(email));
+        if (!response.IsSuccessStatusCode)
+        {
+            var detail = await ReadProblemDetailAsync(response);
+            throw new InvalidOperationException(detail);
+        }
+    }
+
     public async Task ForgotPasswordAsync(ForgotPasswordRequest req)
     {
         var response = await _http.PostAsJsonAsync("auth/forgot-password", req);
