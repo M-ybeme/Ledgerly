@@ -3,6 +3,7 @@ using Ledgerly.Web.Components;
 using Ledgerly.Web.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Radzen;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,10 +13,25 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddRadzenComponents();
 
-// Auth
+// Auth — cookie scheme registered only to satisfy IAuthenticationService.
+// The Web uses Blazor-level auth (AuthorizeRouteView + LedgerlyAuthStateProvider),
+// so the cookie challenge must never redirect; return 401 instead.
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options => options.LoginPath = "/login");
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.Events.OnRedirectToLogin = ctx =>
+        {
+            ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = ctx =>
+        {
+            ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    });
 builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<AuthTokenService>();
 builder.Services.AddScoped<AuthenticationStateProvider, LedgerlyAuthStateProvider>();
@@ -57,6 +73,13 @@ builder.Services.AddHttpClient<CreditApiClient>(client =>
     .AddHttpMessageHandler<BearerTokenHandler>();
 
 var app = builder.Build();
+
+// Trust Railway's reverse proxy so Request.Scheme = "https" and
+// NavigationManager generates correct https:// URIs.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

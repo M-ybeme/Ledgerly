@@ -9,6 +9,7 @@ using Ledgerly.Application.Debts;
 using Ledgerly.Application.Scenarios;
 using Ledgerly.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -81,6 +82,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
     await DbSeeder.SeedDemoUserAsync(app.Services);
 }
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 app.UseExceptionHandler();
 app.UseCors();
