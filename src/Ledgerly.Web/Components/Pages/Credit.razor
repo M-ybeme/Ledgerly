@@ -1,6 +1,5 @@
 @page "/credit"
 @rendermode InteractiveServer
-@attribute [Authorize]
 @using Ledgerly.Contracts.Credit
 @using Ledgerly.Contracts.Debts
 @using Ledgerly.Contracts.Scenarios
@@ -141,6 +140,22 @@ else
                 <RadzenText class="rz-mb-3">
                     Base range: <strong>@projectionResult.BaseScoreRangeLow – @projectionResult.BaseScoreRangeHigh</strong>
                 </RadzenText>
+
+                @{
+                    var scoreChartData = projectionResult.Months
+                        .Select(m => new ScoreChartPoint($"Mo {m.Month}", m.ScoreRangeLow, m.ScoreRangeHigh))
+                        .ToList();
+                }
+                <RadzenChart Style="height:260px; width:100%;" class="rz-mb-4">
+                    <RadzenAreaSeries Data="@scoreChartData" CategoryProperty="Label" ValueProperty="High"
+                                      Title="Score High" Fill="#b5d542" Stroke="#93ad2a" StrokeWidth="2" />
+                    <RadzenAreaSeries Data="@scoreChartData" CategoryProperty="Label" ValueProperty="Low"
+                                      Title="Score Low" Fill="#5b8dd9" Stroke="#3a6bbf" StrokeWidth="2" />
+                    <RadzenCategoryAxis><RadzenGridLines Visible="false" /></RadzenCategoryAxis>
+                    <RadzenValueAxis Min="300" Max="850" Formatter="@(v => v.ToString())"><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                    <RadzenLegend Visible="true" />
+                    <RadzenChartTooltipOptions Shared="true" />
+                </RadzenChart>
 
                 <RadzenDataGrid Data="@projectionResult.Months" TItem="CreditScoreMonthDto" AllowSorting="false" AllowColumnResize="true">
                     <Columns>
@@ -332,4 +347,5 @@ else
     }
 
     private sealed record DebtDropdownItem(string Value, string Label);
+    private sealed record ScoreChartPoint(string Label, int Low, int High);
 }

@@ -3,6 +3,7 @@ using Ledgerly.Domain.Accounts;
 using Ledgerly.Domain.Budget;
 using Ledgerly.Domain.Credit;
 using Ledgerly.Domain.Debts;
+using Ledgerly.Domain.Income;
 using Ledgerly.Domain.Scenarios;
 using Ledgerly.Infrastructure.Auth;
 using Microsoft.AspNetCore.Identity;
@@ -31,6 +32,9 @@ public class LedgerlyDbContext : IdentityDbContext<ApplicationUser, IdentityRole
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<CreditProfile> CreditProfiles => Set<CreditProfile>();
     public DbSet<CreditAccountProfile> CreditAccountProfiles => Set<CreditAccountProfile>();
+    public DbSet<IncomeSource> IncomeSources => Set<IncomeSource>();
+    public DbSet<PlannedExpense> PlannedExpenses => Set<PlannedExpense>();
+    public DbSet<MonthlyBudget> MonthlyBudgets => Set<MonthlyBudget>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -43,6 +47,9 @@ public class LedgerlyDbContext : IdentityDbContext<ApplicationUser, IdentityRole
         modelBuilder.Entity<BudgetCategory>().HasQueryFilter(a => a.UserId == _currentUser.UserId);
         modelBuilder.Entity<BudgetPlan>().HasQueryFilter(a => a.UserId == _currentUser.UserId);
         modelBuilder.Entity<Transaction>().HasQueryFilter(a => a.UserId == _currentUser.UserId);
+        modelBuilder.Entity<IncomeSource>().HasQueryFilter(a => a.UserId == _currentUser.UserId);
+        modelBuilder.Entity<PlannedExpense>().HasQueryFilter(a => a.UserId == _currentUser.UserId);
+        modelBuilder.Entity<MonthlyBudget>().HasQueryFilter(a => a.UserId == _currentUser.UserId);
 
         // Phase 1: Scenario ↔ DebtAccount many-to-many
         modelBuilder.Entity<Scenario>()

@@ -1,4 +1,6 @@
+using System.Net.Http.Headers;
 using Ledgerly.Contracts.Budget;
+using Ledgerly.Web.Auth;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ledgerly.Web.Services;
@@ -7,7 +9,12 @@ public sealed class TransactionsApiClient
 {
     private readonly HttpClient _http;
 
-    public TransactionsApiClient(HttpClient http) => _http = http;
+    public TransactionsApiClient(HttpClient http, AuthTokenService auth)
+    {
+        _http = http;
+        if (auth.Token?.Token is { } tok)
+            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tok);
+    }
 
     public async Task<List<TransactionDto>> GetAllAsync(DateOnly? from = null, DateOnly? to = null, CancellationToken ct = default)
     {

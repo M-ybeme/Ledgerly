@@ -32,6 +32,7 @@
         </div>
 
         <RadzenButton Text="Sign In" ButtonStyle="ButtonStyle.Primary" Style="width:100%;" Click="@Submit" Disabled="@loading" />
+        <RadzenButton Text="Try the Demo" ButtonStyle="ButtonStyle.Light" Style="width:100%; margin-top:0.5rem;" Click="@SignInAsDemo" Disabled="@loading" />
 
         @if (emailNotConfirmed)
         {
@@ -80,6 +81,13 @@
         {
             loading = false;
         }
+    }
+
+    private Task SignInAsDemo()
+    {
+        email = "demo@ledgerly.dev";
+        password = "Demo1234!";
+        return Submit();
     }
 
     private async Task ResendConfirmation()

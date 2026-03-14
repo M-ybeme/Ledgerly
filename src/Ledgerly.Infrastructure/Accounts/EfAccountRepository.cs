@@ -21,12 +21,19 @@ public sealed class EfAccountRepository : IAccountRepository
         => _db.Accounts.AsNoTracking().OrderBy(a => a.Name).ToListAsync(ct);
 
     public Task<Account?> GetByIdAsync(Guid id, CancellationToken ct = default)
-        => _db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, ct);
+        => _db.Accounts.FirstOrDefaultAsync(a => a.Id == id, ct);
 
     public Task AddAsync(Account account, CancellationToken ct = default)
     {
         account.UserId = _currentUser.UserId;
         return _db.Accounts.AddAsync(account, ct).AsTask();
+    }
+
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var account = await _db.Accounts.FirstOrDefaultAsync(a => a.Id == id, ct);
+        if (account is not null)
+            _db.Accounts.Remove(account);
     }
 
     public Task SaveChangesAsync(CancellationToken ct = default)

@@ -1,6 +1,6 @@
-# Ledgerly — Architecture-First Roadmap (v3)
+# Ledgerly — Architecture-First Roadmap (v4)
 
-*Last Updated: Feb 21, 2026 — Phase 6 (UI Polish) complete; Phase 7 (Production Readiness) pending user UI review*
+*Last Updated: Mar 14, 2026 — Phase 8 (Dashboard & UX Enhancements) complete; Export remaining for v1.0*
 
 ---
 
@@ -13,6 +13,7 @@ Ledgerly is a privacy-first financial simulation platform designed to model:
 * Monthly budgeting (planned vs actual)
 * Reality tracking — log what you actually paid, see drift, get updated projections
 * Credit score estimation (range-based, assumption-driven)
+* Income tracking and planned expense management
 
 Primary Goals:
 
@@ -31,7 +32,8 @@ A user opens Ledgerly and:
 3. **Compares scenarios** — duplicates a scenario, changes one variable (e.g. +$100 extra/month, or Snowball vs Avalanche), sees side-by-side: months saved, interest saved. *This is the emotional core — it stops feeling like a calculator and starts feeling powerful.*
 4. **Tracks reality** — each month, logs what they actually paid. Ledgerly shows: are they ahead or behind? Updated payoff timeline based on actual payments. The plan feels alive.
 5. **Sees credit impact** — range-based score projection tied to their debt payoff strategy. "If you pay this off by month 18, your estimated score range is 680–720."
-6. **Trusts the tool with their data** — logged in, data is theirs, can export to CSV or JSON backup. Feels like a product, not a demo.
+6. **Manages income and bills** — tracks income sources, planned monthly expenses, marks bills paid, sees this month's cash flow at a glance.
+7. **Trusts the tool with their data** — logged in, data is theirs, can export to CSV or JSON backup. Feels like a product, not a demo.
 
 ---
 
@@ -43,85 +45,38 @@ The minimum feature set to call this a complete v1.0:
 * [X] Run Snowball and Avalanche strategies with extra payment
 * [X] **Compare scenarios side-by-side** (months saved, interest saved)
 * [X] Log actual payments; see updated payoff timeline
+* [X] JWT Authentication + user isolation
+* [X] Deployed to production (Railway)
 * [ ] Export (CSV or JSON)
-* [ ] JWT Authentication + user isolation
-* [ ] Deployed to production
-
-Credit estimation is a Phase 2 enrichment, not a v1.0 blocker.
 
 ---
 
-# Current Status (As of Feb 21, 2026)
+# Current Status (As of Mar 14, 2026)
 
 ## Completed
 
 * .NET 8 solution scaffolded
 * PostgreSQL running in Docker (ledgerly-postgres container)
 * EF Core 8 + Npgsql configured
-* Migrations operational (InitialCreate → RemovePing → AddAccounts → AddDebtsAndScenarios → AddBudgetSystem)
-* Accounts vertical slice working end-to-end (Web → API → DB)
-* Swagger operational
-* Clean baseline schema established
+* Migrations operational through AddIncomeSourcesPlannedExpensesMonthlyBudgets + AddPlannedExpensePriority
 * **Full clean architecture implemented (Phase 0.5 complete)**
-  * Ledgerly.Domain — Account entity, AccountType enum, no EF/infra references
-  * Ledgerly.Contracts — AccountDto, CreateAccountRequest; references Domain
-  * Ledgerly.Application — IAccountRepository interface, AccountService with consolidated ToDto mapping
-  * Ledgerly.Infrastructure — EfAccountRepository, LedgerlyDbContext, AddLedgerlyInfrastructure DI extension
-  * Ledgerly.Api — Controller depends only on AccountService, never DbContext; ProblemDetails error shape standardized
-  * Ledgerly.Web — Blazor Server; AccountsApiClient extracts ProblemDetails detail on errors; Accounts page fully interactive
-* Reference directions enforced: Domain ← Contracts ← Application, Infrastructure → Domain + Application, Api → Application + Infrastructure + Contracts, Web → Contracts
-* **Debt Projection Engine implemented (Phase 1 complete)**
-  * DebtAccount entity + full CRUD (API + service + EF repository)
-  * Scenario entity with user-selected many-to-many debt associations
-  * PayoffStrategy enum (Snowball / Avalanche)
-  * DebtProjectionService — pure monthly amortization engine (no DB dependency)
-  * Snowball and Avalanche strategies with extra payment cascading
-  * GET /scenarios/{id}/projection endpoint — returns full month-by-month ProjectionResultDto
-  * Debts.razor — full CRUD UI (create, inline edit, delete)
-  * Scenarios.razor — scenario creation with debt multi-select, inline projection results table
-  * xUnit test project (Ledgerly.Tests) — 7 passing tests validating projection correctness
-* **Budget System implemented (Phase 2 complete)**
-  * BudgetCategory entity (user-defined, typed Income/Expense) + full CRUD
-  * BudgetPlan entity (freeform date range) with BudgetPlanLine children + full CRUD
-  * Transaction entity (date-linked, no explicit plan FK) + full CRUD
-  * BudgetSummaryService — pure planned vs actual computation with variance, income/expense totals, net
-  * GET /budget-plans/{id}/summary endpoint — returns BudgetSummaryDto
-  * Restrict FK: categories cannot be deleted if transactions exist (409 Conflict)
-  * BudgetCategories.razor — category CRUD
-  * Budget.razor — plan selector, create plan form with per-category amounts, planned vs actual summary table, transaction management
-  * 5 additional unit tests for BudgetSummaryService (13 total passing)
-* **Scenario Comparison implemented (Phase 3 complete)**
-  * ScenarioComparisonService — pure service, projects both scenarios, computes MonthsSaved + InterestSaved + WinnerLabel
-  * ScenarioSummaryDto + ScenarioComparisonDto contracts
-  * GET /scenarios/compare?a={id}&b={id} endpoint
-  * POST /scenarios/{id}/duplicate endpoint — creates named copy with same debts + strategy
-  * Scenarios.razor — Duplicate button per scenario; Compare section with two dropdowns, side-by-side results table with winner banner
-  * 13 unit tests still passing
-* **Reality Tracking implemented (Phase 4 complete)**
-  * ActualPayment entity — links Scenario + DebtAccount + date + amount
-  * ActualPaymentService — CRUD with validation (debt must be in scenario, amount > 0)
-  * DriftService — pure service; simulates actual vs projected month-by-month; recomputes payoff timeline from actual balances
-  * GET /scenarios/{id}/payments, POST /scenarios/{id}/payments, DELETE /scenarios/{id}/payments/{paymentId}
-  * GET /scenarios/{id}/drift — returns DriftSummaryDto with MonthsDrift, TotalInterestSaved, per-debt drift
-  * Scenarios.razor — "This Month" plan panel with Log Payment modal; "View Drift" button with drift results table
-  * Migration: AddActualPayments (cascade from Scenario, restrict from DebtAccount)
-  * 19 total unit tests passing (6 new DriftService tests)
-* **Credit Score Estimation implemented (Phase 5 complete)**
-  * CreditProfile + CreditAccountProfile entities — per-scenario, hybrid linked/standalone accounts
-  * CreditScoreService — pure 3-factor model: utilization, average account age, payment history recovery
-  * Score always returned as a range [low, high], clamped to [300, 850]
-  * GET/PUT/DELETE /scenarios/{id}/credit endpoints + GET /scenarios/{id}/credit/projection
-  * Credit.razor — scenario selector, profile form with per-account rows, projection table, assumptions panel
-  * Migration: AddCreditProfiles (cascade from Scenario, restrict from DebtAccount)
-  * 25 total unit tests passing (6 new CreditScoreService tests)
+* **Debt Projection Engine (Phase 1 complete)**
+* **Budget System (Phase 2 complete)**
+* **Scenario Comparison (Phase 3 complete)**
+* **Reality Tracking (Phase 4 complete)**
+* **Credit Score Estimation (Phase 5 complete)**
+* **UI/UX Polish with Radzen Blazor (Phase 6 complete)**
+* **Production Readiness — Auth + Deployment (Phase 7 complete)**
+* **Dashboard & UX Enhancements (Phase 8 complete)**
+  * Income Sources, Planned Expenses, Monthly Budgets
+  * Full dashboard rebuild with charts
+  * Dark/light theme
+  * Mobile-responsive navbar
+  * Demo data seeder
 
 ## Not Yet Implemented
 
-* ~~Reality tracking (actual payments + drift + updated projections)~~ ✓ Phase 4 complete
-* ~~Credit score estimation~~ ✓ Phase 5 complete
-* JWT Authentication + user isolation
-* Production deployment
-* Export (CSV / JSON)
+* Export (CSV / JSON) — last remaining v1.0 item
 
 ---
 
@@ -190,7 +145,7 @@ Depends only on Application (never directly on EF).
 
 ### Ledgerly.Web
 
-* Blazor UI
+* Blazor Server
 * HTTP client calls to API
 * View models
 * UI logic
@@ -386,16 +341,144 @@ Outcome:
 
 ---
 
-## Phase 7 — Production Readiness
+## Phase 7 — Production Readiness (Complete)
 
-* JWT Authentication — user registration, login, token issuance
-* User isolation — all entities scoped to userId; no cross-user data access
-* Railway deployment — API + Web + PostgreSQL hosted
-* Environment variable configuration — no secrets in code
-* JSON backup export — full user data snapshot
+### Authentication & User Isolation
+
+* [X] ASP.NET Core Identity installed (`Microsoft.AspNetCore.Identity.EntityFrameworkCore`)
+* [X] `ApplicationUser : IdentityUser<Guid>` in Infrastructure/Auth
+* [X] `LedgerlyDbContext` extended to `IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>`
+* [X] `ICurrentUserService` interface in Application layer; `CurrentUserService` in Api reads JWT `sub` claim
+* [X] Global EF query filters on all 7 root entities (Account, DebtAccount, Scenario, BudgetCategory, BudgetPlan, Transaction, IncomeSource, PlannedExpense, MonthlyBudget) — all scoped to `UserId`
+* [X] `UserId` FK added to all root entities; migration sets existing rows to sentinel `00000000-...`
+* [X] All 7 existing controllers decorated with `[Authorize]`
+* [X] All repository Create methods set `entity.UserId = _currentUser.UserId`
+
+### JWT
+
+* [X] `Microsoft.AspNetCore.Authentication.JwtBearer` installed
+* [X] `JwtTokenService` — reads `Jwt:Secret/Issuer/Audience/ExpiryHours` from config; issues tokens with `sub` + `email` + `jti` claims
+* [X] `PostConfigure` used to guarantee JWT as the default scheme (overrides Identity's cookie challenge)
+
+### AuthController
+
+* [X] `POST /auth/register` — creates Identity user, sends confirmation email; returns 201 (no token until confirmed)
+* [X] `POST /auth/login` — validates password, checks email confirmed, returns `AuthTokenDto`
+* [X] `GET /auth/confirm-email?email=&token=` — confirms Identity email token
+* [X] `POST /auth/forgot-password` — generates reset token, sends email; always returns 200
+* [X] `POST /auth/reset-password` — validates reset token, updates password
+* [X] `POST /auth/change-password` — `[Authorize]`; requires current password
+* [X] `GET /auth/me` — `[Authorize]`; returns email + id
+
+### Email
+
+* [X] `IEmailService` interface in Application layer
+* [X] `SendGridEmailService` in Infrastructure — reads `SendGrid:ApiKey` and `SendGrid:FromEmail`
+
+### Web Auth Layer
+
+* [X] `AuthTokenService` — scoped per circuit; holds token + email; raises `OnChange` event
+* [X] `BearerTokenHandler` — `DelegatingHandler` that injects `Authorization: Bearer` header on all API calls
+* [X] `LedgerlyAuthStateProvider` — extends `AuthenticationStateProvider`; parses JWT claims from token
+* [X] JWT stored in `localStorage` ("authToken" / "authEmail"); restored in `MainLayout.OnAfterRenderAsync(firstRender)`
+* [X] `Routes.razor` uses `<AuthorizeRouteView>` with `<NotAuthorized><RedirectToLogin /></NotAuthorized>`
+* [X] Login.razor, Register.razor, ConfirmEmail.razor, ForgotPassword.razor, ResetPassword.razor, ChangePassword.razor
+
+### Deployment
+
+* [X] `src/Ledgerly.Api/Dockerfile`
+* [X] `src/Ledgerly.Web/Dockerfile`
+* [X] `appsettings.Production.json` for both Api and Web
+* [X] `.env.example` at solution root documenting all required environment variables
+* [X] Railway deployment — API + Web + managed PostgreSQL
+* [X] `db.Database.MigrateAsync()` at API startup — migrations auto-apply on Railway deploy
+* [X] Demo user (`demo@ledgerly.dev` / `Demo1234!`) seeded at startup in all environments
 
 Outcome:
-Ledgerly behaves like a lightweight SaaS product. Users own their data. The application is live.
+[X] Ledgerly behaves like a lightweight SaaS product. Users own their data. The application is live on Railway.
+
+---
+
+## Phase 8 — Income, Planned Expenses & Dashboard Rebuild (Complete)
+
+### New Domain Entities
+
+* [X] `IncomeSource` entity — Name, Amount, PayFrequency enum (Weekly/Biweekly/SemiMonthly/Monthly), optional AccountId, computed `MonthlyAmount`
+* [X] `PlannedExpense` entity — Description, PlannedAmount, DueDate, CategoryId (optional), IsRecurring, Priority (`ExpensePriority` enum: MustPay/WantToPay), ActualAmount, PaidDate; computed `IsPaid`
+* [X] `MonthlyBudget` entity — Month (DateOnly, first of month), CategoryId, Amount; per-user budget allocation
+
+### New API Endpoints
+
+* [X] `GET/POST/PUT/DELETE /income-sources` — full CRUD for income sources
+* [X] `GET/POST/PUT/DELETE /planned-expenses` — full CRUD for planned expenses
+* [X] `POST /planned-expenses/{id}/mark-paid` — records actual amount and paid date
+* [X] `POST /planned-expenses/{id}/mark-unpaid` — clears payment
+* [X] `GET/PUT /monthly-budgets` — read and set monthly budget allocations
+
+### New Migrations
+
+* [X] `AddIncomeSourcesPlannedExpensesMonthlyBudgets` — adds all three tables
+* [X] `AddPlannedExpensePriority` — adds `Priority` integer column to PlannedExpenses
+
+### New Pages
+
+* [X] `IncomeSources.razor` — CRUD table for income sources with frequency and monthly equivalent display
+* [X] `PlannedExpenses.razor` — CRUD table with priority badges, status badges (Paid/Overdue/Upcoming), mark-paid flow
+* [X] NavMenu updated — Planned Expenses link added
+
+### Dashboard Rebuild (Home.razor)
+
+* [X] Summary cards — Total Debt, Expected Monthly Income, Actual Income This Month, Planned Expenses (with overdue count)
+* [X] Cash Flow chart with **Last 6 Months / This Month toggle** (`RadzenSelectBar`)
+  * Last 6 Months: grouped bar chart — Expected Income, Actual Income, Planned Expenses, Actual Expenses per month
+  * This Month: grouped bar chart — Expected vs Actual for Income and Expenses
+* [X] Priority breakdown pie chart — MustPay vs WantToPay proportion with progress bars and paid amounts
+* [X] Planned Expenses table — inline edit (description, due date, amount, priority), inline mark-paid with actual amount input
+* [X] Mark-paid updates Actual Expenses bar on chart immediately (uses ActualAmount from PlannedExpenses, not Transactions)
+* [X] Debt Balances horizontal bar chart
+* [X] Quick-action cards — Accounts, Categories, Income Sources, Planned Expenses
+
+### Chart Improvements Across App
+
+* [X] **Credit.razor** — Area chart showing Score Low/High trajectory over projection period (above the data table)
+* [X] **Scenarios.razor** — Line chart showing total remaining debt declining over time (per projection result)
+* [X] **Budget.razor** — Horizontal grouped bar chart (Planned vs Actual per category) shown when summary is loaded
+* [X] All chart heights tuned to fit on a standard screen without scrolling
+
+### Dark / Light Theme
+
+* [X] CSS variable-based theming (`--ld-bg-page`, `--ld-bg-card`, `--ld-text-primary`, etc.)
+* [X] `[data-theme="dark"]` selector overrides all Radzen CSS variables for dark mode
+* [X] Anti-FOUC inline script in `App.razor` — applies saved theme before Blazor renders (no flash)
+* [X] Toggle button (sun/moon icon) in nav footer — persists preference to `localStorage`
+* [X] Smooth `transition` on background/color changes
+
+### Mobile-Responsive Navbar
+
+* [X] Hamburger button in `MainLayout.razor` (outside sidebar) — toggles `navOpen` state
+* [X] Sidebar uses `transform: translateX(-100%)` on mobile, slides in with `.page.nav-open` class
+* [X] Full-screen backdrop overlay closes sidebar on tap
+* [X] Sidebar auto-closes on any navigation (`Nav.LocationChanged`)
+* [X] Mobile topbar fixed at top (56px) with hamburger + Ledgerly logo + name
+* [X] Desktop sidebar unchanged — sticky flex item, always visible
+
+### Brand & Visual Identity
+
+* [X] Ledgerly logo + "Ledgerly" wordmark in sidebar nav-brand and mobile topbar
+* [X] Brand CSS variable system (`--ld-primary`, `--ld-secondary`, `--ld-tertiary`, etc.)
+* [X] Sidebar gradient updated from generic navy-purple to teal-forward (`#054849` → `#021e1e`) matching logo
+* [X] `RadzenSelectBar` active item styled with brand lime-green
+* [X] Radzen CSS variables overridden globally to match brand colors
+
+### Demo Data Seeder
+
+* [X] Comprehensive `DbSeeder.SeedDemoUserAsync` — creates demo user + full financial dataset on first startup
+* [X] **All dates are relative to `DateTime.Today`** — data always looks current regardless of when the app starts
+* [X] Seeded data: 2 accounts, 2 income sources, 3 debts, 3 scenarios, 11 planned expenses (past-due ones auto-marked paid), 6 months of budget plans + ~20 transactions/month, credit profile
+* [X] Scenario actual payments seeded for past months (Avalanche scenario drift tracking works out of the box)
+
+Outcome:
+[X] Ledgerly has a polished, brand-consistent UI that works on mobile. The dashboard gives a real financial snapshot at a glance. New users can explore with demo data that always looks live.
 
 ---
 
@@ -403,16 +486,16 @@ Ledgerly behaves like a lightweight SaaS product. Users own their data. The appl
 
 The minimum bar to call this a shipped v1.0 product:
 
-* Clean layered architecture demonstrated end-to-end
-* EF Core migrations stable and documented
-* Domain logic separated from persistence
-* Projection engine unit tested
-* Budget system functional
-* **Scenario comparison working** (the insight differentiator)
-* Reality tracking: actual payments logged, drift shown, projection updated
-* Export working (CSV or JSON)
-* Authentication + user isolation working
-* Deployed and publicly accessible
+* [X] Clean layered architecture demonstrated end-to-end
+* [X] EF Core migrations stable and documented
+* [X] Domain logic separated from persistence
+* [X] Projection engine unit tested
+* [X] Budget system functional
+* [X] **Scenario comparison working** (the insight differentiator)
+* [X] Reality tracking: actual payments logged, drift shown, projection updated
+* [X] Authentication + user isolation working
+* [X] Deployed and publicly accessible
+* [ ] Export working (CSV or JSON) ← last remaining item
 
 ---
 
@@ -420,14 +503,14 @@ The minimum bar to call this a shipped v1.0 product:
 
 What a technical reviewer evaluating the project would assess:
 
-* Domain modeling maturity (entities, enums, no EF in domain)
-* Financial calculation correctness (unit tested projection engine, budget summary)
-* Clean API boundaries (controllers depend only on services, never DbContext)
-* Service layer patterns (pure computation services, repository interfaces, DI)
-* EF Core competence (migrations, cascade rules, many-to-many, AsNoTracking discipline)
-* Production deployment competence (Railway, environment config, JWT)
-
-All of the above are demonstrated by completing through Phase 6.
+* [X] Domain modeling maturity (entities, enums, no EF in domain)
+* [X] Financial calculation correctness (unit tested projection engine, budget summary)
+* [X] Clean API boundaries (controllers depend only on services, never DbContext)
+* [X] Service layer patterns (pure computation services, repository interfaces, DI)
+* [X] EF Core competence (migrations, cascade rules, many-to-many, AsNoTracking discipline)
+* [X] Production deployment competence (Railway, environment config, JWT)
+* [X] UI/UX quality (Radzen components, dark/light theme, mobile-responsive, brand consistency)
+* [X] Real-world data modeling (income sources, planned expenses, cash flow, credit scoring)
 
 ---
 
@@ -435,12 +518,14 @@ All of the above are demonstrated by completing through Phase 6.
 
 These are genuinely optional features that extend the product after v1.0:
 
-* CSV bank import — upload a bank statement, auto-categorize transactions
-* Multi-currency support
-* Public read-only share links — share a scenario view without requiring login
-* Mobile-optimized layout
-* Strategy comparison dashboard (enhanced visualization of Phase 3 comparison)
+* [ ] Export (CSV / JSON) — full user data snapshot; last v1.0 blocker
+* [ ] CSV bank import — upload a bank statement, auto-categorize transactions
+* [ ] Multi-currency support
+* [ ] Public read-only share links — share a scenario view without requiring login
+* [ ] Strategy comparison dashboard (enhanced visualization of Phase 3 comparison)
+* [ ] Push/email notifications for overdue planned expenses
+* [ ] Account balance tracking over time (net worth chart)
 
 ---
 
-End of Roadmap v3
+End of Roadmap v4

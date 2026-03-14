@@ -6,9 +6,11 @@ using Ledgerly.Application.Auth;
 using Ledgerly.Application.Budget;
 using Ledgerly.Application.Credit;
 using Ledgerly.Application.Debts;
+using Ledgerly.Application.Income;
 using Ledgerly.Application.Scenarios;
 using Ledgerly.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 
@@ -33,6 +35,9 @@ builder.Services.AddScoped<TransactionService>();
 builder.Services.AddScoped<BudgetSummaryService>();
 builder.Services.AddScoped<CreditProfileService>();
 builder.Services.AddScoped<CreditScoreService>();
+builder.Services.AddScoped<IncomeSourceService>();
+builder.Services.AddScoped<PlannedExpenseService>();
+builder.Services.AddScoped<MonthlyBudgetService>();
 
 // Auth services
 builder.Services.AddHttpContextAccessor();
@@ -44,7 +49,7 @@ var jwtSecret = builder.Configuration["Jwt:Secret"] ?? throw new InvalidOperatio
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "Ledgerly";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "LedgerlyUsers";
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+builder.Services.AddAuthentication()
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
@@ -74,13 +79,33 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 // Infrastructure services (includes Identity)
 builder.Services.AddLedgerlyInfrastructure(builder.Configuration);
 
+// AddIdentity (above) overwrites DefaultChallengeScheme to cookie auth via a Configure action.
+// PostConfigure runs after ALL Configure actions, so this is the final word.
+builder.Services.PostConfigure<Microsoft.AspNetCore.Authentication.AuthenticationOptions>(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+});
+
 var app = builder.Build();
+
+// Auto-migrate and seed on every startup (safe — EF skips already-applied migrations)
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<Ledgerly.Infrastructure.Data.LedgerlyDbContext>();
+    await db.Database.MigrateAsync();
+}
+await DbSeeder.SeedDemoUserAsync(app.Services);
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-    await DbSeeder.SeedDemoUserAsync(app.Services);
+}
+else
+{
+    app.UseExceptionHandler();
 }
 
 app.UseForwardedHeaders(new ForwardedHeadersOptions
@@ -88,7 +113,6 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
-app.UseExceptionHandler();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();

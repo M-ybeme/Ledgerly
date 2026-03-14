@@ -13,6 +13,7 @@
 </head>
 
 <body>
+    <script>(function(){var t=localStorage.getItem('ld-theme')||'light';document.documentElement.setAttribute('data-theme',t);})();</script>
     <Routes @rendermode="@(new InteractiveServerRenderMode(prerender: false))" />
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>

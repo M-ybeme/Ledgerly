@@ -1,4 +1,6 @@
+using System.Net.Http.Headers;
 using Ledgerly.Contracts.Debts;
+using Ledgerly.Web.Auth;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ledgerly.Web.Services;
@@ -7,7 +9,12 @@ public sealed class DebtAccountsApiClient
 {
     private readonly HttpClient _http;
 
-    public DebtAccountsApiClient(HttpClient http) => _http = http;
+    public DebtAccountsApiClient(HttpClient http, AuthTokenService auth)
+    {
+        _http = http;
+        if (auth.Token?.Token is { } tok)
+            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tok);
+    }
 
     public async Task<List<DebtAccountDto>> GetAllAsync(CancellationToken ct = default)
         => await _http.GetFromJsonAsync<List<DebtAccountDto>>("/debt-accounts", ct)

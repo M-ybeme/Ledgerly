@@ -45,4 +45,31 @@ public class AccountsController : ControllerBase
             return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
         }
     }
+
+    // PUT /accounts/{id}
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<AccountDto>> Update(Guid id, [FromBody] UpdateAccountRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var updated = await _svc.UpdateAsync(id, req, ct);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    // DELETE /accounts/{id}
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _svc.DeleteAsync(id, ct);
+        return NoContent();
+    }
 }

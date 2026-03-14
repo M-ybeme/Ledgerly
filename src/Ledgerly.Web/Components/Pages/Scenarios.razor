@@ -1,6 +1,5 @@
 @page "/scenarios"
 @rendermode InteractiveServer
-@attribute [Authorize]
 @using Ledgerly.Contracts.Debts
 @using Ledgerly.Contracts.Scenarios
 @using Ledgerly.Domain.Scenarios
@@ -12,7 +11,44 @@
 
 <PageTitle>Scenarios — Ledgerly</PageTitle>
 
-<RadzenText TextStyle="TextStyle.H4">Payoff Scenarios</RadzenText>
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-3">Payoff Scenarios</RadzenText>
+
+<!-- ── Explainer ────────────────────────────────────────────────── -->
+<RadzenCard class="rz-mb-4" style="background:var(--rz-base-100);">
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
+        <RadzenIcon Icon="info" style="color:var(--rz-info);" />
+        <RadzenText TextStyle="TextStyle.Subtitle1" style="margin:0;"><b>How Scenarios Work</b></RadzenText>
+        <RadzenButton Icon="@(showHelp ? "expand_less" : "expand_more")" ButtonStyle="ButtonStyle.Light"
+                      Size="ButtonSize.ExtraSmall" Click="@(() => showHelp = !showHelp)" />
+    </RadzenStack>
+    @if (showHelp)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-3">
+            A <b>scenario</b> models a debt payoff plan — choose which debts to include, how much extra you can put toward them each month, and which payoff strategy to use. Run a projection to see exactly how long it takes, how much interest you'll pay, and what each month looks like. Use <b>Compare</b> to pit two scenarios head-to-head.
+        </RadzenText>
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="1.5rem" Wrap="FlexWrap.Wrap" class="rz-mb-2">
+            <RadzenCard Variant="Variant.Outlined" Style="flex:1; min-width:220px; max-width:380px;">
+                <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-1">
+                    <RadzenIcon Icon="filter_list" style="vertical-align:middle; margin-right:4px;" />Avalanche <RadzenBadge Text="Saves the most interest" BadgeStyle="BadgeStyle.Success" />
+                </RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">
+                    Puts extra money toward the debt with the <b>highest interest rate</b> first. Once it's paid off, that freed-up payment rolls into the next highest rate. Mathematically optimal — minimizes the total interest you pay over time.
+                </RadzenText>
+            </RadzenCard>
+            <RadzenCard Variant="Variant.Outlined" Style="flex:1; min-width:220px; max-width:380px;">
+                <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-1">
+                    <RadzenIcon Icon="bolt" style="vertical-align:middle; margin-right:4px;" />Snowball <RadzenBadge Text="Builds momentum" BadgeStyle="BadgeStyle.Info" />
+                </RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">
+                    Puts extra money toward the debt with the <b>smallest balance</b> first. Debts disappear faster, giving you quick wins and motivation to keep going. May cost slightly more in interest than Avalanche, but many people find it easier to stick with.
+                </RadzenText>
+            </RadzenCard>
+        </RadzenStack>
+        <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">
+            <b>Tip:</b> Try duplicating a scenario and switching the strategy to compare Avalanche vs. Snowball on the same debts.
+        </RadzenText>
+    }
+</RadzenCard>
 
 <!-- ── Create Scenario ──────────────────────────────────────────── -->
 <RadzenCard class="rz-mb-4">
@@ -91,6 +127,25 @@ else
                         Total paid: @result.TotalPaid.ToString("C") —
                         Total interest: @result.TotalInterestPaid.ToString("C")
                     </RadzenText>
+
+                    @* Payoff line chart *@
+                    @{
+                        var payoffData = result.Months
+                            .Select(m => new PayoffPoint($"Mo {m.Month}", m.Debts.Sum(d => d.RemainingBalance)))
+                            .ToList();
+                    }
+                    <RadzenChart Style="height:200px; width:100%;" class="rz-mt-3 rz-mb-2">
+                        <RadzenLineSeries Data="@payoffData" CategoryProperty="Label" ValueProperty="Balance"
+                                          Title="Total Remaining" Stroke="#e05c5c" StrokeWidth="2.5">
+                            <RadzenSeriesDataLabels Visible="false" />
+                        </RadzenLineSeries>
+                        <RadzenAreaSeries Data="@payoffData" CategoryProperty="Label" ValueProperty="Balance"
+                                          Fill="#e05c5c" Stroke="transparent" />
+                        <RadzenCategoryAxis Visible="false" />
+                        <RadzenValueAxis Formatter="@(v => v is double d ? d.ToString("C0") : "")"><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                        <RadzenLegend Visible="false" />
+                        <RadzenChartTooltipOptions Shared="false" />
+                    </RadzenChart>
 
                     @* Month-by-month breakdown (dynamic columns — plain table) *@
                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mt-2 rz-mb-2">
@@ -341,6 +396,10 @@ else
 }
 
 @code {
+    private sealed record PayoffPoint(string Label, decimal Balance);
+
+    private bool showHelp = true;
+
     private List<ScenarioDto>? scenarios;
     private List<DebtAccountDto>? allDebts;
     private IEnumerable<Guid> selectedDebtIds = [];

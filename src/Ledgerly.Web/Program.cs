@@ -43,34 +43,37 @@ var apiBaseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5122"
 builder.Services.AddHttpClient<AuthApiClient>(client =>
     client.BaseAddress = new Uri(apiBaseUrl));
 
-// Protected API clients (bearer token injected)
+// Protected API clients — AuthTokenService is injected directly into each client's
+// constructor (resolved from the Blazor circuit scope, not root scope).
 builder.Services.AddHttpClient<AccountsApiClient>(client =>
-    client.BaseAddress = new Uri(apiBaseUrl))
-    .AddHttpMessageHandler<BearerTokenHandler>();
+    client.BaseAddress = new Uri(apiBaseUrl));
 
 builder.Services.AddHttpClient<DebtAccountsApiClient>(client =>
-    client.BaseAddress = new Uri(apiBaseUrl))
-    .AddHttpMessageHandler<BearerTokenHandler>();
+    client.BaseAddress = new Uri(apiBaseUrl));
 
 builder.Services.AddHttpClient<ScenariosApiClient>(client =>
-    client.BaseAddress = new Uri(apiBaseUrl))
-    .AddHttpMessageHandler<BearerTokenHandler>();
+    client.BaseAddress = new Uri(apiBaseUrl));
 
 builder.Services.AddHttpClient<BudgetCategoriesApiClient>(client =>
-    client.BaseAddress = new Uri(apiBaseUrl))
-    .AddHttpMessageHandler<BearerTokenHandler>();
+    client.BaseAddress = new Uri(apiBaseUrl));
 
 builder.Services.AddHttpClient<BudgetPlansApiClient>(client =>
-    client.BaseAddress = new Uri(apiBaseUrl))
-    .AddHttpMessageHandler<BearerTokenHandler>();
+    client.BaseAddress = new Uri(apiBaseUrl));
 
 builder.Services.AddHttpClient<TransactionsApiClient>(client =>
-    client.BaseAddress = new Uri(apiBaseUrl))
-    .AddHttpMessageHandler<BearerTokenHandler>();
+    client.BaseAddress = new Uri(apiBaseUrl));
 
 builder.Services.AddHttpClient<CreditApiClient>(client =>
-    client.BaseAddress = new Uri(apiBaseUrl))
-    .AddHttpMessageHandler<BearerTokenHandler>();
+    client.BaseAddress = new Uri(apiBaseUrl));
+
+builder.Services.AddHttpClient<IncomeSourcesApiClient>(client =>
+    client.BaseAddress = new Uri(apiBaseUrl));
+
+builder.Services.AddHttpClient<PlannedExpensesApiClient>(client =>
+    client.BaseAddress = new Uri(apiBaseUrl));
+
+builder.Services.AddHttpClient<MonthlyBudgetsApiClient>(client =>
+    client.BaseAddress = new Uri(apiBaseUrl));
 
 var app = builder.Build();
 

@@ -1,15 +1,59 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Nav
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
+<div class="page @(navOpen ? "nav-open" : "")">
+
+    @* Mobile top bar — rendered here so it is outside the sidebar *@
+    <div class="mobile-topbar">
+        <button class="hamburger-btn" @onclick="Toggle" aria-label="Toggle navigation">
+            @if (navOpen)
+            {
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            }
+            else
+            {
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                    <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+            }
+        </button>
+        <a href="" style="display:flex; align-items:center; gap:.5rem; text-decoration:none;">
+            <img src="/img/LedgerlyLogoTransparent.png" alt="Ledgerly" style="height:32px;" />
+            <span style="color:#ffffff; font-size:1.05rem; font-weight:700; letter-spacing:.02em;">Ledgerly</span>
+        </a>
     </div>
 
-    <main>
+    <div class="sidebar-backdrop" @onclick="Close"></div>
+
+    <aside class="sidebar">
+        <NavMenu />
+    </aside>
+
+    <div class="main-content">
         <article class="content px-4">
             @Body
         </article>
-    </main>
+    </div>
 </div>
 
 <RadzenComponents />
+
+@code {
+    private bool navOpen = false;
+
+    protected override void OnInitialized() => Nav.LocationChanged += OnNavChanged;
+
+    private void OnNavChanged(object? s, LocationChangedEventArgs e)
+    {
+        navOpen = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void Toggle() => navOpen = !navOpen;
+    private void Close() => navOpen = false;
+
+    public void Dispose() => Nav.LocationChanged -= OnNavChanged;
+}

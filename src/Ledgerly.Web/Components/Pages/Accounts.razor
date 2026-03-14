@@ -1,6 +1,5 @@
 @page "/accounts"
 @rendermode InteractiveServer
-@attribute [Authorize]
 @using Ledgerly.Contracts.Accounts
 @using Ledgerly.Domain.Accounts
 @inject Ledgerly.Web.Services.AccountsApiClient Api
@@ -11,17 +10,21 @@
 <RadzenText TextStyle="TextStyle.H4">Accounts</RadzenText>
 
 <RadzenCard class="rz-mb-4">
-    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Add Account</RadzenText>
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">@(editingId.HasValue ? "Edit Account" : "Add Account")</RadzenText>
     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
         <div>
             <RadzenLabel Text="Name" />
-            <RadzenTextBox @bind-Value="newName" Placeholder="Account name" Style="display:block; width:220px;" />
+            <RadzenTextBox @bind-Value="formName" Placeholder="Account name" Style="display:block; width:220px;" />
         </div>
         <div>
             <RadzenLabel Text="Type" />
-            <RadzenDropDown @bind-Value="newType" Data="@accountTypes" Style="display:block; width:160px;" />
+            <RadzenDropDown @bind-Value="formType" Data="@accountTypes" Style="display:block; width:160px;" />
         </div>
-        <RadzenButton Text="Create" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="@Create" />
+        <RadzenButton Text="@(editingId.HasValue ? "Update" : "Create")" Icon="@(editingId.HasValue ? "save" : "add")" ButtonStyle="ButtonStyle.Primary" Click="@Save" />
+        @if (editingId.HasValue)
+        {
+            <RadzenButton Text="Cancel" Icon="cancel" ButtonStyle="ButtonStyle.Light" Click="@CancelEdit" />
+        }
     </RadzenStack>
 </RadzenCard>
 
@@ -42,17 +45,26 @@ else
             <RadzenDataGridColumn TItem="AccountDto" Title="Created">
                 <Template Context="a">@a.CreatedUtc.ToString("yyyy-MM-dd")</Template>
             </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="AccountDto" Title="Actions" Sortable="false" Width="120px">
+                <Template Context="a">
+                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => StartEdit(a))" class="rz-mr-1" />
+                    <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => Delete(a.Id))" />
+                </Template>
+            </RadzenDataGridColumn>
         </Columns>
     </RadzenDataGrid>
 }
 
 @code {
     private List<AccountDto>? accounts;
-    private string newName = "";
-    private AccountType newType = AccountType.Checking;
+    private string formName = "";
+    private AccountType formType = AccountType.Checking;
+    private Guid? editingId;
     private IEnumerable<AccountType> accountTypes = Enum.GetValues<AccountType>();
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
     {
         try
         {
@@ -65,15 +77,51 @@ else
         }
     }
 
-    private async Task Create()
+    private async Task Save()
     {
         try
         {
-            var created = await Api.CreateAccountAsync(new CreateAccountRequest(newName, newType));
-            accounts ??= new();
-            accounts.Add(created);
-            newName = "";
-            NotificationService.Notify(NotificationSeverity.Success, "Created", $"Account \"{created.Name}\" added.");
+            if (editingId.HasValue)
+            {
+                var updated = await Api.UpdateAccountAsync(editingId.Value, new UpdateAccountRequest(formName, formType));
+                NotificationService.Notify(NotificationSeverity.Success, "Updated", $"\"{updated.Name}\" saved.");
+                CancelEdit();
+            }
+            else
+            {
+                var created = await Api.CreateAccountAsync(new CreateAccountRequest(formName, formType));
+                formName = "";
+                NotificationService.Notify(NotificationSeverity.Success, "Created", $"Account \"{created.Name}\" added.");
+            }
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private void StartEdit(AccountDto a)
+    {
+        editingId = a.Id;
+        formName = a.Name;
+        formType = a.Type;
+    }
+
+    private void CancelEdit()
+    {
+        editingId = null;
+        formName = "";
+        formType = AccountType.Checking;
+    }
+
+    private async Task Delete(Guid id)
+    {
+        try
+        {
+            await Api.DeleteAccountAsync(id);
+            NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Account removed.");
+            await LoadAsync();
         }
         catch (Exception ex)
         {

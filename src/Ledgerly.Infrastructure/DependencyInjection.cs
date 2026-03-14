@@ -3,6 +3,7 @@ using Ledgerly.Application.Auth;
 using Ledgerly.Application.Budget;
 using Ledgerly.Application.Credit;
 using Ledgerly.Application.Debts;
+using Ledgerly.Application.Income;
 using Ledgerly.Application.Scenarios;
 using Ledgerly.Infrastructure.Accounts;
 using Ledgerly.Infrastructure.Auth;
@@ -10,6 +11,7 @@ using Ledgerly.Infrastructure.Budget;
 using Ledgerly.Infrastructure.Credit;
 using Ledgerly.Infrastructure.Data;
 using Ledgerly.Infrastructure.Debts;
+using Ledgerly.Infrastructure.Income;
 using Ledgerly.Infrastructure.Scenarios;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +40,10 @@ public static class DependencyInjection
         .AddDefaultTokenProviders();
 
         services.AddScoped<IEmailService, SendGridEmailService>();
+
+        services.AddScoped<IIncomeSourceRepository, EfIncomeSourceRepository>();
+        services.AddScoped<IPlannedExpenseRepository, EfPlannedExpenseRepository>();
+        services.AddScoped<IMonthlyBudgetRepository, EfMonthlyBudgetRepository>();
 
         services.AddScoped<IAccountRepository, EfAccountRepository>();
         services.AddScoped<IDebtAccountRepository, EfDebtAccountRepository>();

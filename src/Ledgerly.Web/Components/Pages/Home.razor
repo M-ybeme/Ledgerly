@@ -1,41 +1,560 @@
 @page "/"
-@attribute [Authorize]
+@rendermode InteractiveServer
+@using Ledgerly.Contracts.Budget
+@using Ledgerly.Contracts.Debts
+@using Ledgerly.Contracts.Income
+@using Ledgerly.Domain.Budget
+@using Ledgerly.Web.Components.Pages
+@inject Ledgerly.Web.Services.TransactionsApiClient TransactionsApi
+@inject Ledgerly.Web.Services.DebtAccountsApiClient DebtsApi
+@inject Ledgerly.Web.Services.IncomeSourcesApiClient IncomeSourcesApi
+@inject Ledgerly.Web.Services.PlannedExpensesApiClient PlannedExpensesApi
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject NavigationManager Nav
 
-<PageTitle>Ledgerly</PageTitle>
+<PageTitle>Dashboard — Ledgerly</PageTitle>
 
-<RadzenText TextStyle="TextStyle.H4">Welcome to Ledgerly</RadzenText>
-<RadzenText TextStyle="TextStyle.Body1" class="rz-mt-2">
-    Your personal finance dashboard. Use the navigation to manage your accounts, debts, scenarios, budget, and credit profile.
-</RadzenText>
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-5">Dashboard</RadzenText>
 
-<RadzenStack Orientation="Orientation.Horizontal" Wrap="FlexWrap.Wrap" Gap="1rem" class="rz-mt-6">
-    <RadzenCard Style="width: 200px;">
-        <RadzenText TextStyle="TextStyle.H6">Accounts</RadzenText>
-        <RadzenText TextStyle="TextStyle.Body2">Track your financial accounts.</RadzenText>
-        <RadzenButton Text="Go" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("accounts"))" class="rz-mt-2" />
+@if (loading)
+{
+    <RadzenText>Loading…</RadzenText>
+}
+else
+{
+    <!-- Summary Cards -->
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1.25rem" Wrap="FlexWrap.Wrap" class="rz-mb-6">
+        <RadzenCard Style="flex:1; min-width:180px;">
+            <RadzenText TextStyle="TextStyle.Overline" style="color:var(--rz-text-secondary-color); letter-spacing:.08em;">TOTAL DEBT</RadzenText>
+            <RadzenText TextStyle="TextStyle.H5" style="color:#e05c5c; margin-top:.25rem;">@totalDebt.ToString("C0")</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">across @debts.Count account@(debts.Count == 1 ? "" : "s")</RadzenText>
+        </RadzenCard>
+        <RadzenCard Style="flex:1; min-width:180px;">
+            <RadzenText TextStyle="TextStyle.Overline" style="color:var(--rz-text-secondary-color); letter-spacing:.08em;">EXPECTED MONTHLY INCOME</RadzenText>
+            <RadzenText TextStyle="TextStyle.H5" style="color:#6aab3e; margin-top:.25rem;">@expectedMonthlyIncome.ToString("C0")</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">@incomeSources.Count source@(incomeSources.Count == 1 ? "" : "s")</RadzenText>
+        </RadzenCard>
+        <RadzenCard Style="flex:1; min-width:180px;">
+            <RadzenText TextStyle="TextStyle.Overline" style="color:var(--rz-text-secondary-color); letter-spacing:.08em;">ACTUAL INCOME THIS MONTH</RadzenText>
+            <RadzenText TextStyle="TextStyle.H5" style="color:#6aab3e; margin-top:.25rem;">@monthIncome.ToString("C0")</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">@DateTime.Today.ToString("MMMM yyyy")</RadzenText>
+        </RadzenCard>
+        <RadzenCard Style="flex:1; min-width:180px;">
+            <RadzenText TextStyle="TextStyle.Overline" style="color:var(--rz-text-secondary-color); letter-spacing:.08em;">PLANNED EXPENSES</RadzenText>
+            @{ var unpaidThisMonth = currentMonthExpenses.Count(e => !e.IsPaid);
+               var overdueCount = currentMonthExpenses.Count(e => !e.IsPaid && e.DueDate < today); }
+            <RadzenText TextStyle="TextStyle.H5" style="margin-top:.25rem;">@currentMonthExpenses.Sum(e => e.PlannedAmount).ToString("C0")</RadzenText>
+            @if (overdueCount > 0)
+            {
+                <RadzenText TextStyle="TextStyle.Body2" style="color:#e05c5c;">@overdueCount overdue · @unpaidThisMonth unpaid</RadzenText>
+            }
+            else
+            {
+                <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">@unpaidThisMonth unpaid this month</RadzenText>
+            }
+        </RadzenCard>
+    </RadzenStack>
+
+    <!-- Chart Section -->
+    <RadzenCard class="rz-mb-6">
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" class="rz-mb-3">
+            <RadzenText TextStyle="TextStyle.H6">Cash Flow</RadzenText>
+            <RadzenSelectBar @bind-Value="showCurrentMonth" TValue="bool">
+                <Items>
+                    <RadzenSelectBarItem Text="Last 6 Months" Value="false" />
+                    <RadzenSelectBarItem Text="This Month" Value="true" />
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
+
+        @if (!showCurrentMonth)
+        {
+            <!-- 6-month bar chart -->
+            @if (monthlyFlow.All(m => m.ExpectedIncome == 0 && m.Income == 0 && m.Expenses == 0))
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">
+                    No data yet. Add income sources, transactions, or planned expenses to see your cash flow.
+                </RadzenAlert>
+            }
+            else
+            {
+                <RadzenChart Style="height:240px; width:100%;">
+                    <RadzenBarSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="ExpectedIncome"
+                                     Title="Expected Income" Fill="#a8d58a" />
+                    <RadzenBarSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="Income"
+                                     Title="Actual Income" Fill="#6aab3e" />
+                    <RadzenBarSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="PlannedExpenses"
+                                     Title="Planned Expenses" Fill="#f0a070" />
+                    <RadzenBarSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="Expenses"
+                                     Title="Actual Expenses" Fill="#e05c5c" />
+                    <RadzenCategoryAxis><RadzenGridLines Visible="false" /></RadzenCategoryAxis>
+                    <RadzenValueAxis Formatter="@FormatCurrency"><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                    <RadzenLegend Visible="true" />
+                    <RadzenChartTooltipOptions Shared="true" />
+                </RadzenChart>
+            }
+        }
+        else
+        {
+            <!-- Current month comparison chart -->
+            <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);" class="rz-mb-3">
+                @DateTime.Today.ToString("MMMM yyyy") — expected vs actual
+            </RadzenText>
+            <RadzenChart Style="height:220px;">
+                <RadzenBarSeries Data="@currentMonthComparison" CategoryProperty="Label" ValueProperty="Expected"
+                                 Title="Expected / Planned" Fill="#5b8dd9" />
+                <RadzenBarSeries Data="@currentMonthComparison" CategoryProperty="Label" ValueProperty="Actual"
+                                 Title="Actual" Fill="#6aab3e" />
+                <RadzenCategoryAxis><RadzenGridLines Visible="false" /></RadzenCategoryAxis>
+                <RadzenValueAxis Formatter="@FormatCurrency"><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                <RadzenLegend Visible="true" />
+                <RadzenChartTooltipOptions Shared="true" />
+            </RadzenChart>
+
+            <!-- Planned Expenses for this month -->
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" style="margin-top:1.5rem; margin-bottom:.75rem;">
+                <RadzenText TextStyle="TextStyle.H6">Expenses This Month</RadzenText>
+            </RadzenStack>
+
+            @if (priorityChart.Any(p => p.Planned > 0))
+            {
+                <RadzenCard Variant="Variant.Outlined" class="rz-mb-4">
+                    <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-2">Expense Breakdown by Priority</RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="1.5rem" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
+                        <div style="flex:1; min-width:200px;">
+                            <RadzenText TextStyle="TextStyle.Caption" style="color:var(--rz-text-secondary-color);">Planned Split</RadzenText>
+                            <RadzenChart Style="height:160px;">
+                                <RadzenPieSeries Data="@priorityChart" CategoryProperty="Priority" ValueProperty="Planned"
+                                                 Fills="@(new[]{"#5b8dd9","#f0a070"})" />
+                                <RadzenLegend Visible="true" />
+                            </RadzenChart>
+                        </div>
+                        <div style="flex:1; min-width:160px;">
+                            @foreach (var p in priorityChart)
+                            {
+                                var pct = priorityChart.Sum(x => x.Planned) > 0
+                                    ? p.Planned / priorityChart.Sum(x => x.Planned) * 100 : 0;
+                                <div style="margin-bottom:.75rem;">
+                                    <div style="display:flex; justify-content:space-between; font-size:.85rem; margin-bottom:2px;">
+                                        <span>@p.Priority</span>
+                                        <span>@p.Planned.ToString("C0")</span>
+                                    </div>
+                                    <div style="background:var(--ld-bg-surface); border-radius:4px; height:8px; overflow:hidden;">
+                                        <div style="background:@(p.Priority=="Must Pay"?"#5b8dd9":"#f0a070"); width:@(pct.ToString("F0"))%; height:100%;"></div>
+                                    </div>
+                                    <div style="font-size:.75rem; color:var(--rz-text-secondary-color); margin-top:2px;">
+                                        Paid: @p.Paid.ToString("C0")
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </RadzenStack>
+                </RadzenCard>
+            }
+
+            @if (currentMonthExpenses.Count == 0)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No planned expenses for this month.</RadzenAlert>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@currentMonthExpenses" TItem="PlannedExpenseDto" AllowSorting="true">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="PlannedExpenseDto" Title="Description" Width="260px">
+                            <Template Context="e">
+                                @if (editingExpenseId == e.Id)
+                                {
+                                    <RadzenTextBox @bind-Value="editDescription" Style="width:100%;" />
+                                }
+                                else
+                                {
+                                    @e.Description
+                                    @if (e.IsRecurring) { <RadzenBadge BadgeStyle="BadgeStyle.Secondary" Text="Recurring" class="rz-ml-1" /> }
+                                    @if (e.Priority == ExpensePriority.MustPay)
+                                    {
+                                        <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text="Must Pay" class="rz-ml-1" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenBadge BadgeStyle="BadgeStyle.Light" Text="Want to Pay" class="rz-ml-1" />
+                                    }
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="PlannedExpenseDto" Title="Due" Width="130px">
+                            <Template Context="e">
+                                @if (editingExpenseId == e.Id)
+                                {
+                                    <RadzenDatePicker @bind-Value="editDueDateProxy" DateFormat="yyyy-MM-dd" Style="width:120px;" />
+                                }
+                                else
+                                {
+                                    @e.DueDate.ToString("MMM d")
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="PlannedExpenseDto" Title="Expected" Width="120px">
+                            <Template Context="e">
+                                @if (editingExpenseId == e.Id)
+                                {
+                                    <RadzenNumeric @bind-Value="editAmount" TValue="decimal" Min="0.01m" Format="C2" Style="width:110px;" />
+                                }
+                                else
+                                {
+                                    @e.PlannedAmount.ToString("C2")
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="PlannedExpenseDto" Title="Actual" Width="110px">
+                            <Template Context="e">
+                                @if (markingPaidId == e.Id)
+                                {
+                                    <RadzenNumeric @bind-Value="markActualAmount" TValue="decimal" Min="0" Format="C2" Style="width:100px;" />
+                                }
+                                else
+                                {
+                                    @(e.ActualAmount.HasValue ? e.ActualAmount.Value.ToString("C2") : "—")
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="PlannedExpenseDto" Title="Status" Width="90px">
+                            <Template Context="e">
+                                @if (e.IsPaid)
+                                {
+                                    <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="Paid" />
+                                }
+                                else if (e.DueDate < today)
+                                {
+                                    <RadzenBadge BadgeStyle="BadgeStyle.Danger" Text="Overdue" />
+                                }
+                                else
+                                {
+                                    <RadzenBadge BadgeStyle="BadgeStyle.Info" Text="Upcoming" />
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="PlannedExpenseDto" Title="Actions" Sortable="false" Width="160px">
+                            <Template Context="e">
+                                @if (editingExpenseId == e.Id)
+                                {
+                                    <RadzenButton Icon="save" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
+                                                  Click="@SaveExpenseEdit" class="rz-mr-1" title="Save" />
+                                    <RadzenButton Icon="cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                  Click="@CancelExpenseEdit" title="Cancel" />
+                                }
+                                else if (markingPaidId == e.Id)
+                                {
+                                    <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
+                                                  Click="@ConfirmMarkPaid" class="rz-mr-1" title="Confirm paid" />
+                                    <RadzenButton Icon="cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                  Click="@CancelMarkPaid" title="Cancel" />
+                                }
+                                else
+                                {
+                                    @if (!e.IsPaid)
+                                    {
+                                        <RadzenButton Icon="paid" ButtonStyle="ButtonStyle.Success" Size="ButtonSize.Small"
+                                                      Click="@(() => StartMarkPaid(e))" class="rz-mr-1" title="Mark paid" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenButton Icon="undo" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                      Click="@(() => MarkUnpaid(e.Id))" class="rz-mr-1" title="Mark unpaid" />
+                                    }
+                                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                  Click="@(() => StartExpenseEdit(e))" title="Edit" />
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+        }
     </RadzenCard>
-    <RadzenCard Style="width: 200px;">
-        <RadzenText TextStyle="TextStyle.H6">Debts</RadzenText>
-        <RadzenText TextStyle="TextStyle.Body2">Manage your debts and loans.</RadzenText>
-        <RadzenButton Text="Go" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("debts"))" class="rz-mt-2" />
-    </RadzenCard>
-    <RadzenCard Style="width: 200px;">
-        <RadzenText TextStyle="TextStyle.H6">Scenarios</RadzenText>
-        <RadzenText TextStyle="TextStyle.Body2">Project payoff timelines.</RadzenText>
-        <RadzenButton Text="Go" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("scenarios"))" class="rz-mt-2" />
-    </RadzenCard>
-    <RadzenCard Style="width: 200px;">
-        <RadzenText TextStyle="TextStyle.H6">Budget</RadzenText>
-        <RadzenText TextStyle="TextStyle.Body2">Plan and track spending.</RadzenText>
-        <RadzenButton Text="Go" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("budget"))" class="rz-mt-2" />
-    </RadzenCard>
-    <RadzenCard Style="width: 200px;">
-        <RadzenText TextStyle="TextStyle.H6">Credit</RadzenText>
-        <RadzenText TextStyle="TextStyle.Body2">Estimate score changes.</RadzenText>
-        <RadzenButton Text="Go" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("credit"))" class="rz-mt-2" />
-    </RadzenCard>
-</RadzenStack>
+
+    <!-- Debt Balances -->
+    @if (debts.Count > 0)
+    {
+        <RadzenCard class="rz-mb-6">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Debt Balances</RadzenText>
+            <RadzenChart Style="height:200px;">
+                <RadzenBarSeries Data="@debts" CategoryProperty="Name" ValueProperty="Balance"
+                                 Title="Balance" Fill="#e05c5c" />
+                <RadzenCategoryAxis><RadzenGridLines Visible="false" /></RadzenCategoryAxis>
+                <RadzenValueAxis Formatter="@FormatCurrency"><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                <RadzenLegend Visible="false" />
+            </RadzenChart>
+        </RadzenCard>
+    }
+
+    <!-- Management Quick Actions -->
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Manage</RadzenText>
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Wrap="FlexWrap.Wrap">
+        <RadzenCard Style="width:210px;">
+            <RadzenText TextStyle="TextStyle.Subtitle1"><strong>Accounts</strong></RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-3" style="color:var(--rz-text-secondary-color);">
+                Checking, savings, and other financial accounts.
+            </RadzenText>
+            <RadzenButton Text="Manage" Icon="account_balance" ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small" Click="@OpenAccounts" />
+        </RadzenCard>
+        <RadzenCard Style="width:210px;">
+            <RadzenText TextStyle="TextStyle.Subtitle1"><strong>Categories</strong></RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-3" style="color:var(--rz-text-secondary-color);">
+                Budget categories used to classify transactions.
+            </RadzenText>
+            <RadzenButton Text="Manage" Icon="label" ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small" Click="@OpenCategories" />
+        </RadzenCard>
+        <RadzenCard Style="width:210px;">
+            <RadzenText TextStyle="TextStyle.Subtitle1"><strong>Income Sources</strong></RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-3" style="color:var(--rz-text-secondary-color);">
+                Paychecks and recurring income per pay period.
+            </RadzenText>
+            <RadzenButton Text="Manage" Icon="payments" ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small" Click="@OpenIncomeSources" />
+        </RadzenCard>
+        <RadzenCard Style="width:210px;">
+            <RadzenText TextStyle="TextStyle.Subtitle1"><strong>Planned Expenses</strong></RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-3" style="color:var(--rz-text-secondary-color);">
+                Bills, one-time costs, expected vs. actual tracking.
+            </RadzenText>
+            <RadzenButton Text="View All" Icon="receipt_long" ButtonStyle="ButtonStyle.Light"
+                          Size="ButtonSize.Small" Click="@(() => Nav.NavigateTo("/planned-expenses"))" />
+        </RadzenCard>
+    </RadzenStack>
+}
 
 @code {
-    [Inject] private NavigationManager Nav { get; set; } = default!;
+    private sealed record MonthlyFlow(string Month, decimal ExpectedIncome, decimal Income, decimal PlannedExpenses, decimal Expenses);
+    private sealed record MonthComparison(string Label, decimal Expected, decimal Actual);
+    private sealed record PriorityComparison(string Priority, decimal Planned, decimal Paid);
+
+    // Data
+    private List<DebtAccountDto> debts = [];
+    private List<MonthlyFlow> monthlyFlow = [];
+    private List<MonthComparison> currentMonthComparison = [];
+    private List<PriorityComparison> priorityChart = [];
+    private List<IncomeSourceDto> incomeSources = [];
+    private List<PlannedExpenseDto> plannedExpenses = [];
+    private List<PlannedExpenseDto> currentMonthExpenses = [];
+
+    // Summary
+    private decimal totalDebt;
+    private decimal expectedMonthlyIncome;
+    private decimal monthIncome;
+    private decimal monthExpenses;
+    private DateOnly today;
+
+    // UI
+    private bool loading = true;
+    private bool showCurrentMonth = false;
+
+    // Inline edit state
+    private Guid? editingExpenseId;
+    private string editDescription = "";
+    private decimal editAmount;
+    private DateOnly editDueDate;
+    private Guid? editCategoryId;
+    private bool editIsRecurring;
+    private ExpensePriority editPriority = ExpensePriority.MustPay;
+
+    private DateTime? editDueDateProxy
+    {
+        get => editDueDate.ToDateTime(TimeOnly.MinValue);
+        set => editDueDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : editDueDate;
+    }
+
+    // Inline mark-paid state
+    private Guid? markingPaidId;
+    private decimal markActualAmount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        today = DateOnly.FromDateTime(DateTime.Today);
+        try
+        {
+            var rangeStart = new DateOnly(today.Year, today.Month, 1).AddMonths(-5);
+
+            var transactionsTask = TransactionsApi.GetAllAsync(rangeStart, today);
+            var debtsTask = DebtsApi.GetAllAsync();
+            var incomeTask = IncomeSourcesApi.GetAllAsync();
+            var plannedTask = PlannedExpensesApi.GetAllAsync();
+            await Task.WhenAll(transactionsTask, debtsTask, incomeTask, plannedTask);
+
+            var transactions = transactionsTask.Result;
+            debts = debtsTask.Result;
+            incomeSources = incomeTask.Result;
+            plannedExpenses = plannedTask.Result;
+
+            totalDebt = debts.Sum(d => d.Balance);
+            expectedMonthlyIncome = incomeSources.Sum(s => s.MonthlyAmount);
+
+            monthIncome = transactions
+                .Where(t => t.Date.Year == today.Year && t.Date.Month == today.Month
+                         && t.CategoryType == CategoryType.Income)
+                .Sum(t => t.Amount);
+
+            monthExpenses = transactions
+                .Where(t => t.Date.Year == today.Year && t.Date.Month == today.Month
+                         && t.CategoryType == CategoryType.Expense)
+                .Sum(t => t.Amount);
+
+            // Planned expenses for current month (due this month OR recurring unpaid ones)
+            currentMonthExpenses = plannedExpenses
+                .Where(e => (e.DueDate.Year == today.Year && e.DueDate.Month == today.Month)
+                         || (e.IsRecurring && !e.IsPaid))
+                .OrderBy(e => e.IsPaid)
+                .ThenBy(e => e.DueDate)
+                .ToList();
+
+            BuildMonthCharts();
+
+            // 6-month flow
+            monthlyFlow = Enumerable.Range(0, 6).Select(i =>
+            {
+                var m = DateTime.Today.AddMonths(-(5 - i));
+                var monthPlanned = plannedExpenses
+                    .Where(e => e.DueDate.Year == m.Year && e.DueDate.Month == m.Month)
+                    .Sum(e => e.PlannedAmount);
+                return new MonthlyFlow(
+                    m.ToString("MMM yy"),
+                    expectedMonthlyIncome,
+                    transactions.Where(t => t.Date.Year == m.Year && t.Date.Month == m.Month
+                                         && t.CategoryType == CategoryType.Income).Sum(t => t.Amount),
+                    monthPlanned,
+                    transactions.Where(t => t.Date.Year == m.Year && t.Date.Month == m.Month
+                                         && t.CategoryType == CategoryType.Expense).Sum(t => t.Amount));
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Load failed", ex.Message);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    // ── Chart helpers ────────────────────────────────────────────────
+
+    private void BuildMonthCharts()
+    {
+        var plannedThisMonth = currentMonthExpenses.Sum(e => e.PlannedAmount);
+        var paidActual = currentMonthExpenses.Where(e => e.IsPaid && e.ActualAmount.HasValue).Sum(e => e.ActualAmount!.Value);
+
+        currentMonthComparison =
+        [
+            new("Income", expectedMonthlyIncome, monthIncome),
+            new("Expenses", plannedThisMonth, paidActual),
+        ];
+
+        priorityChart =
+        [
+            new("Must Pay",
+                currentMonthExpenses.Where(e => e.Priority == ExpensePriority.MustPay).Sum(e => e.PlannedAmount),
+                currentMonthExpenses.Where(e => e.Priority == ExpensePriority.MustPay && e.IsPaid).Sum(e => e.ActualAmount ?? 0)),
+            new("Want to Pay",
+                currentMonthExpenses.Where(e => e.Priority == ExpensePriority.WantToPay).Sum(e => e.PlannedAmount),
+                currentMonthExpenses.Where(e => e.Priority == ExpensePriority.WantToPay && e.IsPaid).Sum(e => e.ActualAmount ?? 0)),
+        ];
+    }
+
+    // ── Inline expense edit ──────────────────────────────────────────
+
+    private void StartExpenseEdit(PlannedExpenseDto e)
+    {
+        editingExpenseId = e.Id;
+        editDescription = e.Description;
+        editAmount = e.PlannedAmount;
+        editDueDate = e.DueDate;
+        editCategoryId = e.CategoryId;
+        editIsRecurring = e.IsRecurring;
+        editPriority = e.Priority;
+        markingPaidId = null;
+    }
+
+    private void CancelExpenseEdit() => editingExpenseId = null;
+
+    private async Task SaveExpenseEdit()
+    {
+        if (!editingExpenseId.HasValue) return;
+        try
+        {
+            await PlannedExpensesApi.UpdateAsync(editingExpenseId.Value,
+                new UpdatePlannedExpenseRequest(editDescription, editAmount, editDueDate, editCategoryId, editIsRecurring, editPriority));
+            editingExpenseId = null;
+            NotificationService.Notify(NotificationSeverity.Success, "Saved", "Expense updated.");
+            await ReloadPlannedExpenses();
+        }
+        catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message); }
+    }
+
+    // ── Inline mark paid ─────────────────────────────────────────────
+
+    private void StartMarkPaid(PlannedExpenseDto e)
+    {
+        markingPaidId = e.Id;
+        markActualAmount = e.PlannedAmount;
+        editingExpenseId = null;
+    }
+
+    private void CancelMarkPaid() => markingPaidId = null;
+
+    private async Task ConfirmMarkPaid()
+    {
+        if (!markingPaidId.HasValue) return;
+        try
+        {
+            await PlannedExpensesApi.MarkPaidAsync(markingPaidId.Value,
+                new MarkPaidRequest(markActualAmount, today));
+            markingPaidId = null;
+            NotificationService.Notify(NotificationSeverity.Success, "Marked paid", "Payment recorded.");
+            await ReloadPlannedExpenses();
+        }
+        catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message); }
+    }
+
+    private async Task MarkUnpaid(Guid id)
+    {
+        try
+        {
+            await PlannedExpensesApi.MarkUnpaidAsync(id);
+            NotificationService.Notify(NotificationSeverity.Success, "Reverted", "Marked as unpaid.");
+            await ReloadPlannedExpenses();
+        }
+        catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message); }
+    }
+
+    private async Task ReloadPlannedExpenses()
+    {
+        plannedExpenses = await PlannedExpensesApi.GetAllAsync();
+        currentMonthExpenses = plannedExpenses
+            .Where(e => (e.DueDate.Year == today.Year && e.DueDate.Month == today.Month)
+                     || (e.IsRecurring && !e.IsPaid))
+            .OrderBy(e => e.IsPaid)
+            .ThenBy(e => e.DueDate)
+            .ToList();
+
+        BuildMonthCharts();
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────
+
+    private static string FormatCurrency(object value) =>
+        value is double d ? d.ToString("C0") : value?.ToString() ?? "";
+
+    private Task OpenAccounts() =>
+        DialogService.OpenAsync<Accounts>("Manage Accounts", null,
+            new DialogOptions { Width = "900px", Resizable = true, CloseDialogOnOverlayClick = true });
+
+    private Task OpenCategories() =>
+        DialogService.OpenAsync<BudgetCategories>("Manage Categories", null,
+            new DialogOptions { Width = "700px", Resizable = true, CloseDialogOnOverlayClick = true });
+
+    private Task OpenIncomeSources() =>
+        DialogService.OpenAsync<IncomeSources>("Income Sources", null,
+            new DialogOptions { Width = "1000px", Resizable = true, CloseDialogOnOverlayClick = true });
 }

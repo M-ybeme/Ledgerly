@@ -1,0 +1,160 @@
+@page "/income-sources"
+@rendermode InteractiveServer
+@using Ledgerly.Contracts.Income
+@using Ledgerly.Contracts.Accounts
+@using Ledgerly.Domain.Income
+@inject Ledgerly.Web.Services.IncomeSourcesApiClient Api
+@inject Ledgerly.Web.Services.AccountsApiClient AccountsApi
+@inject NotificationService NotificationService
+
+<PageTitle>Income Sources — Ledgerly</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4">Income Sources</RadzenText>
+
+<RadzenCard class="rz-mb-4">
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">@(editingId.HasValue ? "Edit Income Source" : "Add Income Source")</RadzenText>
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
+        <div>
+            <RadzenLabel Text="Name" />
+            <RadzenTextBox @bind-Value="formName" Placeholder="e.g. Main Job" Style="display:block; width:200px;" />
+        </div>
+        <div>
+            <RadzenLabel Text="Amount" />
+            <RadzenNumeric @bind-Value="formAmount" TValue="decimal" Min="0.01m" Format="C2" Style="display:block; width:130px;" />
+        </div>
+        <div>
+            <RadzenLabel Text="Frequency" />
+            <RadzenDropDown @bind-Value="formFrequency" Data="@frequencies" Style="display:block; width:160px;" />
+        </div>
+        <div>
+            <RadzenLabel Text="Account (optional)" />
+            <RadzenDropDown @bind-Value="formAccountId" Data="@accounts" TextProperty="Name" ValueProperty="Id"
+                            Placeholder="— none —" AllowClear="true" Style="display:block; width:200px;" />
+        </div>
+        <RadzenButton Text="@(editingId.HasValue ? "Update" : "Add")" Icon="@(editingId.HasValue ? "save" : "add")"
+                      ButtonStyle="ButtonStyle.Primary" Click="@Save" />
+        @if (editingId.HasValue)
+        {
+            <RadzenButton Text="Cancel" Icon="cancel" ButtonStyle="ButtonStyle.Light" Click="@CancelEdit" />
+        }
+    </RadzenStack>
+</RadzenCard>
+
+@if (sources is null)
+{
+    <RadzenText>Loading…</RadzenText>
+}
+else if (sources.Count == 0)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No income sources yet. Add one above.</RadzenAlert>
+}
+else
+{
+    <RadzenDataGrid Data="@sources" TItem="IncomeSourceDto" AllowSorting="true" AllowColumnResize="true">
+        <Columns>
+            <RadzenDataGridColumn TItem="IncomeSourceDto" Property="Name" Title="Name" />
+            <RadzenDataGridColumn TItem="IncomeSourceDto" Title="Amount">
+                <Template Context="s">@s.Amount.ToString("C2") / @s.Frequency.ToString()</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="IncomeSourceDto" Title="Monthly">
+                <Template Context="s"><strong>@s.MonthlyAmount.ToString("C0")</strong>/mo</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="IncomeSourceDto" Property="AccountName" Title="Account">
+                <Template Context="s">@(s.AccountName ?? "—")</Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="IncomeSourceDto" Title="Actions" Sortable="false" Width="120px">
+                <Template Context="s">
+                    <RadzenButton Icon="edit" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                  Click="@(() => StartEdit(s))" class="rz-mr-1" />
+                    <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small"
+                                  Click="@(() => Delete(s.Id))" />
+                </Template>
+            </RadzenDataGridColumn>
+        </Columns>
+    </RadzenDataGrid>
+
+    <RadzenCard class="rz-mt-4">
+        <RadzenText TextStyle="TextStyle.Body1">
+            <strong>Total expected monthly income: @sources.Sum(s => s.MonthlyAmount).ToString("C0")</strong>
+        </RadzenText>
+    </RadzenCard>
+}
+
+@code {
+    private List<IncomeSourceDto>? sources;
+    private List<AccountDto> accounts = [];
+
+    private string formName = "";
+    private decimal formAmount = 0;
+    private PayFrequency formFrequency = PayFrequency.Biweekly;
+    private Guid? formAccountId;
+    private Guid? editingId;
+
+    private IEnumerable<PayFrequency> frequencies = Enum.GetValues<PayFrequency>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadAsync(), LoadAccountsAsync());
+    }
+
+    private async Task LoadAsync()
+    {
+        try { sources = await Api.GetAllAsync(); }
+        catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Load failed", ex.Message); sources = []; }
+    }
+
+    private async Task LoadAccountsAsync()
+    {
+        try { accounts = await AccountsApi.GetAccountsAsync(); }
+        catch { accounts = []; }
+    }
+
+    private async Task Save()
+    {
+        try
+        {
+            if (editingId.HasValue)
+            {
+                var updated = await Api.UpdateAsync(editingId.Value,
+                    new UpdateIncomeSourceRequest(formName, formAmount, formFrequency, formAccountId));
+                NotificationService.Notify(NotificationSeverity.Success, "Updated", $"\"{updated.Name}\" saved.");
+                CancelEdit();
+            }
+            else
+            {
+                var created = await Api.CreateAsync(
+                    new CreateIncomeSourceRequest(formName, formAmount, formFrequency, formAccountId));
+                NotificationService.Notify(NotificationSeverity.Success, "Added", $"\"{created.Name}\" added.");
+                formName = ""; formAmount = 0; formAccountId = null;
+            }
+            await LoadAsync();
+        }
+        catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message); }
+    }
+
+    private void StartEdit(IncomeSourceDto s)
+    {
+        editingId = s.Id;
+        formName = s.Name;
+        formAmount = s.Amount;
+        formFrequency = s.Frequency;
+        formAccountId = s.AccountId;
+    }
+
+    private void CancelEdit()
+    {
+        editingId = null;
+        formName = ""; formAmount = 0; formFrequency = PayFrequency.Biweekly; formAccountId = null;
+    }
+
+    private async Task Delete(Guid id)
+    {
+        try
+        {
+            await Api.DeleteAsync(id);
+            NotificationService.Notify(NotificationSeverity.Success, "Deleted", "Income source removed.");
+            await LoadAsync();
+        }
+        catch (Exception ex) { NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message); }
+    }
+}

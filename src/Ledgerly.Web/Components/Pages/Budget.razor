@@ -1,6 +1,5 @@
 @page "/budget"
 @rendermode InteractiveServer
-@attribute [Authorize]
 @using Ledgerly.Contracts.Budget
 @using Ledgerly.Domain.Budget
 @inject Ledgerly.Web.Services.BudgetPlansApiClient PlansApi
@@ -99,6 +98,20 @@ else
 
         @if (summary is not null)
         {
+            @if (budgetChartData.Count > 0)
+            {
+                <RadzenChart Style="height:240px; width:100%;" class="rz-mb-4">
+                    <RadzenBarSeries Data="@budgetChartData" CategoryProperty="CategoryName" ValueProperty="Planned"
+                                     Title="Planned" Fill="#5b8dd9" Orientation="Orientation.Horizontal" />
+                    <RadzenBarSeries Data="@budgetChartData" CategoryProperty="CategoryName" ValueProperty="Actual"
+                                     Title="Actual" Fill="#6aab3e" Orientation="Orientation.Horizontal" />
+                    <RadzenCategoryAxis><RadzenGridLines Visible="false" /></RadzenCategoryAxis>
+                    <RadzenValueAxis Formatter="@(v => v is double d ? d.ToString("C0") : "")"><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                    <RadzenLegend Visible="true" />
+                    <RadzenChartTooltipOptions Shared="true" />
+                </RadzenChart>
+            }
+
             <RadzenDataGrid Data="@summary.Categories" TItem="CategorySummaryDto" AllowSorting="true" class="rz-mb-3">
                 <Columns>
                     <RadzenDataGridColumn TItem="CategorySummaryDto" Property="CategoryName" Title="Category" />
@@ -226,6 +239,7 @@ else
 
     // Summary
     private BudgetSummaryDto? summary;
+    private List<CategorySummaryDto> budgetChartData = [];
     private bool loadingSummary;
 
     // Transactions
@@ -341,6 +355,10 @@ else
         try
         {
             summary = await PlansApi.GetSummaryAsync(selectedPlan!.Id);
+            budgetChartData = summary.Categories
+                .Where(c => c.Planned > 0 || c.Actual > 0)
+                .OrderByDescending(c => c.Planned)
+                .ToList();
         }
         catch (Exception ex)
         {

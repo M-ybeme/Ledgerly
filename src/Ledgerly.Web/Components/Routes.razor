@@ -1,23 +1,47 @@
 @using Ledgerly.Contracts.Auth
 @using Ledgerly.Web.Auth
+@using Microsoft.AspNetCore.Components
 @inject AuthTokenService AuthTokenService
 @inject IJSRuntime JS
 
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+        <AuthorizeView>
+            <Authorized>
+                <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+            </Authorized>
             <NotAuthorized>
-                <RedirectToLogin />
+                @if (IsPublicPage(routeData))
+                {
+                    <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+                }
+                else
+                {
+                    <RedirectToLogin />
+                }
             </NotAuthorized>
             <Authorizing>
-                <p>Loading...</p>
+                <p style="padding:2rem; color:#fff;">Loading…</p>
             </Authorizing>
-        </AuthorizeRouteView>
+        </AuthorizeView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
 
 @code {
+    // Routes that are accessible without authentication.
+    private static readonly HashSet<string> PublicTemplates =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "login", "register", "forgot-password", "reset-password", "confirm-email"
+        };
+
+    private static bool IsPublicPage(RouteData routeData) =>
+        routeData.PageType
+            .GetCustomAttributes(typeof(RouteAttribute), false)
+            .Cast<RouteAttribute>()
+            .Any(a => PublicTemplates.Contains(a.Template.TrimStart('/')));
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;

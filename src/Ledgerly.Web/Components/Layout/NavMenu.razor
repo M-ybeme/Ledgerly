@@ -3,87 +3,90 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">
-            <img src="/img/LedgerlyLogoTransparent.png" alt="Ledgerly" style="height:48px; width:auto;" />
-        </a>
-    </div>
+<div class="nav-brand">
+    <a href="" style="display:flex; align-items:center; gap:.6rem; text-decoration:none;">
+        <img src="/img/LedgerlyLogoTransparent.png" alt="Ledgerly" style="height:44px; width:auto;" />
+        <span style="color:#ffffff; font-size:1.25rem; font-weight:700; letter-spacing:.02em;">Ledgerly</span>
+    </a>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+<AuthorizeView>
+    <Authorized Context="authState">
+        <div class="nav-links">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                Dashboard
+            </NavLink>
+            <NavLink class="nav-link" href="debts">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg>
+                Debts
+            </NavLink>
+            <NavLink class="nav-link" href="scenarios">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>
+                Scenarios
+            </NavLink>
+            <NavLink class="nav-link" href="budget">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
+                Budget
+            </NavLink>
+            <NavLink class="nav-link" href="credit">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                Credit
+            </NavLink>
+            <NavLink class="nav-link" href="planned-expenses">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zm-7-5H7v-2h5v2zm3-4H7v-2h9v2z"/></svg>
+                Planned Expenses
+            </NavLink>
+        </div>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="flex-column">
-        <AuthorizeView>
-            <Authorized Context="authState">
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                        <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-                    </NavLink>
-                </div>
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="accounts">
-                        <span class="bi bi-wallet-fill-nav-menu" aria-hidden="true"></span> Accounts
-                    </NavLink>
-                </div>
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="debts">
-                        <span class="bi bi-credit-card-fill-nav-menu" aria-hidden="true"></span> Debts
-                    </NavLink>
-                </div>
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="scenarios">
-                        <span class="bi bi-graph-up-arrow-nav-menu" aria-hidden="true"></span> Scenarios
-                    </NavLink>
-                </div>
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="budget-categories">
-                        <span class="bi bi-tags-fill-nav-menu" aria-hidden="true"></span> Categories
-                    </NavLink>
-                </div>
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="budget">
-                        <span class="bi bi-bar-chart-fill-nav-menu" aria-hidden="true"></span> Budget
-                    </NavLink>
-                </div>
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="credit">
-                        <span class="bi bi-star-nav-menu" aria-hidden="true"></span> Credit
-                    </NavLink>
-                </div>
-
-                <hr style="border-color:rgba(255,255,255,0.2); margin:0.5rem 1rem;" />
-
-                <div class="nav-item px-3">
-                    <span class="nav-link" style="font-size:0.8em; opacity:0.7; cursor:default;">
-                        @authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
-                    </span>
-                </div>
-
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="change-password">
-                        <span class="bi bi-gear-fill-nav-menu" aria-hidden="true"></span> Change Password
-                    </NavLink>
-                </div>
-
-                <div class="nav-item px-3">
-                    <button class="nav-link btn btn-link" style="width:100%; text-align:left;" @onclick="Logout">
-                        <span class="bi bi-box-arrow-right-nav-menu" aria-hidden="true"></span> Logout
-                    </button>
-                </div>
-            </Authorized>
-        </AuthorizeView>
-    </nav>
-</div>
+        <div class="nav-footer">
+            <hr class="nav-divider" />
+            <button class="nav-theme-toggle" @onclick="ToggleTheme">
+                @if (isDark)
+                {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41.39.39 1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41.39.39 1.03.39 1.41 0l1.06-1.06z"/></svg>
+                    @:Light Mode
+                }
+                else
+                {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+                    @:Dark Mode
+                }
+            </button>
+            <span class="nav-email">@authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value</span>
+            <NavLink class="nav-link" href="change-password">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                Settings
+            </NavLink>
+            <button class="nav-link nav-logout" @onclick="Logout">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+                Logout
+            </button>
+        </div>
+    </Authorized>
+</AuthorizeView>
 
 @code {
+    private bool isDark = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var theme = await JS.InvokeAsync<string?>("localStorage.getItem", "ld-theme");
+            isDark = theme == "dark";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleTheme()
+    {
+        isDark = !isDark;
+        var theme = isDark ? "dark" : "light";
+        await JS.InvokeVoidAsync("localStorage.setItem", "ld-theme", theme);
+        await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-theme", theme);
+    }
+
     private async Task Logout()
     {
         await JS.InvokeVoidAsync("localStorage.removeItem", "authToken");
