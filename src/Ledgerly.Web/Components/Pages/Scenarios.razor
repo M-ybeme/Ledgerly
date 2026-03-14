@@ -1,6 +1,6 @@
 @page "/scenarios"
 @rendermode InteractiveServer
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Authorize]
 @using Ledgerly.Contracts.Debts
 @using Ledgerly.Contracts.Scenarios
 @using Ledgerly.Domain.Scenarios
@@ -364,11 +364,20 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        var scenariosTask = ScenariosApi.GetAllAsync();
-        var debtsTask = DebtsApi.GetAllAsync();
-        await Task.WhenAll(scenariosTask, debtsTask);
-        scenarios = await scenariosTask;
-        allDebts = await debtsTask;
+        try
+        {
+            var scenariosTask = ScenariosApi.GetAllAsync();
+            var debtsTask = DebtsApi.GetAllAsync();
+            await Task.WhenAll(scenariosTask, debtsTask);
+            scenarios = await scenariosTask;
+            allDebts = await debtsTask;
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Load failed", ex.Message);
+            scenarios = [];
+            allDebts = [];
+        }
     }
 
     private async Task CreateScenario()

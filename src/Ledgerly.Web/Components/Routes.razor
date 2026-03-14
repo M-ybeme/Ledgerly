@@ -1,3 +1,8 @@
+@using Ledgerly.Contracts.Auth
+@using Ledgerly.Web.Auth
+@inject AuthTokenService AuthTokenService
+@inject IJSRuntime JS
+
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
@@ -11,3 +16,18 @@
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var token = await JS.InvokeAsync<string?>("localStorage.getItem", "authToken");
+        var email = await JS.InvokeAsync<string?>("localStorage.getItem", "authEmail");
+
+        if (token is not null && email is not null)
+            AuthTokenService.SetToken(new AuthTokenDto(token, email, default));
+        else
+            AuthTokenService.MarkInitialized();
+    }
+}

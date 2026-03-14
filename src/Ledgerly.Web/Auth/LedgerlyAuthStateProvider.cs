@@ -8,6 +8,7 @@ namespace Ledgerly.Web.Auth;
 public sealed class LedgerlyAuthStateProvider : AuthenticationStateProvider, IDisposable
 {
     private readonly AuthTokenService _auth;
+    private readonly TaskCompletionSource<AuthenticationState> _firstState = new();
 
     public LedgerlyAuthStateProvider(AuthTokenService auth)
     {
@@ -15,17 +16,32 @@ public sealed class LedgerlyAuthStateProvider : AuthenticationStateProvider, IDi
         _auth.OnChange += OnAuthChanged;
     }
 
-    private void OnAuthChanged() =>
-        NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
+    private void OnAuthChanged()
+    {
+        var state = BuildState();
+        _firstState.TrySetResult(state);
+        NotifyAuthenticationStateChanged(Task.FromResult(state));
+    }
 
     public override Task<AuthenticationState> GetAuthenticationStateAsync()
     {
+        // Hold the pending task until MainLayout reads localStorage.
+        // AuthorizeRouteView shows <Authorizing> content while waiting,
+        // preventing a premature redirect to /login.
+        if (_auth.IsInitialized)
+            return Task.FromResult(BuildState());
+
+        return _firstState.Task;
+    }
+
+    private AuthenticationState BuildState()
+    {
         if (_auth.Token is null)
-            return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
+            return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
 
         var claims = ParseTokenClaims(_auth.Token.Token);
         var identity = new ClaimsIdentity(claims, "jwt");
-        return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(identity)));
+        return new AuthenticationState(new ClaimsPrincipal(identity));
     }
 
     private static List<Claim> ParseTokenClaims(string token)

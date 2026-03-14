@@ -1,6 +1,6 @@
 @page "/budget-categories"
 @rendermode InteractiveServer
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Authorize]
 @using Ledgerly.Contracts.Budget
 @using Ledgerly.Domain.Budget
 @inject Ledgerly.Web.Services.BudgetCategoriesApiClient Api
@@ -65,7 +65,15 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        categories = await Api.GetAllAsync();
+        try
+        {
+            categories = await Api.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Load failed", ex.Message);
+            categories = [];
+        }
     }
 
     private async Task Save()

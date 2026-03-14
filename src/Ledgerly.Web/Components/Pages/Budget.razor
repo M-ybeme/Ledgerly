@@ -1,6 +1,6 @@
 @page "/budget"
 @rendermode InteractiveServer
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Authorize]
 @using Ledgerly.Contracts.Budget
 @using Ledgerly.Domain.Budget
 @inject Ledgerly.Web.Services.BudgetPlansApiClient PlansApi
@@ -255,11 +255,20 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        var plansTask = PlansApi.GetAllAsync();
-        var categoriesTask = CategoriesApi.GetAllAsync();
-        await Task.WhenAll(plansTask, categoriesTask);
-        plans = await plansTask;
-        allCategories = await categoriesTask;
+        try
+        {
+            var plansTask = PlansApi.GetAllAsync();
+            var categoriesTask = CategoriesApi.GetAllAsync();
+            await Task.WhenAll(plansTask, categoriesTask);
+            plans = await plansTask;
+            allCategories = await categoriesTask;
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Load failed", ex.Message);
+            plans = [];
+            allCategories = [];
+        }
     }
 
     private decimal GetPlanLineAmount(Guid categoryId)

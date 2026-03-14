@@ -1,6 +1,6 @@
 @page "/credit"
 @rendermode InteractiveServer
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Authorize]
 @using Ledgerly.Contracts.Credit
 @using Ledgerly.Contracts.Debts
 @using Ledgerly.Contracts.Scenarios
@@ -196,8 +196,19 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        scenarios = await ScenariosApi.GetAllAsync();
-        loading = false;
+        try
+        {
+            scenarios = await ScenariosApi.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Load failed", ex.Message);
+            scenarios = [];
+        }
+        finally
+        {
+            loading = false;
+        }
     }
 
     private async Task OnScenarioChanged(object value)

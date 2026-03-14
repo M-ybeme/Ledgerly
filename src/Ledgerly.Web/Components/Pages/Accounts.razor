@@ -1,6 +1,6 @@
 @page "/accounts"
 @rendermode InteractiveServer
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@attribute [Authorize]
 @using Ledgerly.Contracts.Accounts
 @using Ledgerly.Domain.Accounts
 @inject Ledgerly.Web.Services.AccountsApiClient Api
@@ -54,7 +54,15 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        accounts = await Api.GetAccountsAsync();
+        try
+        {
+            accounts = await Api.GetAccountsAsync();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Load failed", ex.Message);
+            accounts = [];
+        }
     }
 
     private async Task Create()

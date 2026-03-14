@@ -1,5 +1,6 @@
 using System.Text;
 using Ledgerly.Api.Auth;
+using Ledgerly.Infrastructure.Auth;
 using Ledgerly.Application.Accounts;
 using Ledgerly.Application.Auth;
 using Ledgerly.Application.Budget;
@@ -78,6 +79,7 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    await DbSeeder.SeedDemoUserAsync(app.Services);
 }
 
 app.UseExceptionHandler();
