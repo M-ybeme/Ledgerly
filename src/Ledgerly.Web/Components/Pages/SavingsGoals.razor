@@ -1,0 +1,214 @@
+@page "/savings-goals"
+@rendermode InteractiveServer
+@using Ledgerly.Contracts.Budget
+@inject Ledgerly.Web.Services.SavingsGoalsApiClient Api
+@inject Radzen.NotificationService NotificationService
+
+<PageTitle>Savings Goals — Ledgerly</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H4" class="rz-mb-5">Savings Goals</RadzenText>
+
+@if (loading)
+{
+    <RadzenText>Loading…</RadzenText>
+}
+else
+{
+    <RadzenCard class="rz-mb-4">
+        <RadzenText TextStyle="TextStyle.H6" style="margin-bottom:1rem;">@(editing is null ? "New Goal" : "Edit Goal")</RadzenText>
+
+        @if (formError is not null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="false" class="rz-mb-3">@formError</RadzenAlert>
+        }
+
+        <RadzenStack Gap="0.75rem">
+            <div>
+                <RadzenLabel Text="Goal Name" />
+                <RadzenTextBox @bind-Value="form.Name" Style="display:block; width:100%;" />
+            </div>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Wrap="FlexWrap.Wrap">
+                <div style="flex:1; min-width:140px;">
+                    <RadzenLabel Text="Target Amount ($)" />
+                    <RadzenNumeric @bind-Value="form.TargetAmount" Style="display:block; width:100%;" Min="0.01m" />
+                </div>
+                <div style="flex:1; min-width:140px;">
+                    <RadzenLabel Text="Saved So Far ($)" />
+                    <RadzenNumeric @bind-Value="form.CurrentAmount" Style="display:block; width:100%;" Min="0m" />
+                </div>
+                <div style="flex:1; min-width:160px;">
+                    <RadzenLabel Text="Target Date (optional)" />
+                    <RadzenDatePicker @bind-Value="targetDateProxy" DateFormat="MM/dd/yyyy" Style="display:block; width:100%;" />
+                </div>
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                <RadzenButton Text="@(editing is null ? "Add Goal" : "Save Changes")" ButtonStyle="ButtonStyle.Primary" Click="@Save" Disabled="@saving" />
+                @if (editing is not null)
+                {
+                    <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="@CancelEdit" />
+                }
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenCard>
+
+    @if (goals.Count == 0)
+    {
+        <RadzenCard>
+            <RadzenText style="color:var(--rz-text-secondary-color);">No savings goals yet. Add one above to get started.</RadzenText>
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenStack Gap="1rem">
+            @foreach (var goal in goals)
+            {
+                <RadzenCard>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" JustifyContent="JustifyContent.SpaceBetween">
+                        <div style="flex:1; min-width:0;">
+                            <RadzenText TextStyle="TextStyle.H6" style="margin-bottom:.25rem;">@goal.Name</RadzenText>
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="1.5rem" Wrap="FlexWrap.Wrap" style="margin-bottom:.75rem;">
+                                <RadzenText TextStyle="TextStyle.Body2">
+                                    <strong>@goal.CurrentAmount.ToString("C0")</strong>
+                                    <span style="color:var(--rz-text-secondary-color);"> of @goal.TargetAmount.ToString("C0")</span>
+                                </RadzenText>
+                                @if (goal.Remaining > 0)
+                                {
+                                    <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">
+                                        @goal.Remaining.ToString("C0") remaining
+                                    </RadzenText>
+                                }
+                                else
+                                {
+                                    <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="Goal Reached!" />
+                                }
+                                @if (goal.TargetDate.HasValue)
+                                {
+                                    <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">
+                                        Target: @goal.TargetDate.Value.ToString("MMM d, yyyy")
+                                    </RadzenText>
+                                }
+                            </RadzenStack>
+
+                            @{
+                                var pct = (double)goal.Progress;
+                                var barColor = pct >= 100 ? "#6aab3e" : pct >= 60 ? "#f0b429" : "#4fa3e0";
+                            }
+                            <div style="background:var(--rz-base-200); border-radius:4px; height:10px; overflow:hidden;">
+                                <div style="@($"width:{pct:F0}%; background:{barColor}; height:100%; border-radius:4px; transition:width .3s;")"></div>
+                            </div>
+                            <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color); margin-top:.25rem;">
+                                @goal.Progress.ToString("F0")% complete
+                            </RadzenText>
+                        </div>
+
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" style="margin-left:1rem; flex-shrink:0;">
+                            <RadzenButton ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Icon="edit" Click="@(() => StartEdit(goal))" />
+                            <RadzenButton ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Icon="delete" Click="@(() => DeleteGoal(goal.Id))" />
+                        </RadzenStack>
+                    </RadzenStack>
+                </RadzenCard>
+            }
+        </RadzenStack>
+    }
+}
+
+@code {
+    private List<SavingsGoalDto> goals = [];
+    private bool loading = true;
+    private bool saving;
+    private string? formError;
+    private Guid? editing;
+
+    private FormModel form = new();
+
+    private DateTime? targetDateProxy
+    {
+        get => form.TargetDate.HasValue ? form.TargetDate.Value.ToDateTime(TimeOnly.MinValue) : null;
+        set => form.TargetDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : null;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        goals = await Api.GetAllAsync();
+        loading = false;
+    }
+
+    private async Task Save()
+    {
+        formError = null;
+        if (string.IsNullOrWhiteSpace(form.Name)) { formError = "Name is required."; return; }
+        if (form.TargetAmount <= 0) { formError = "Target amount must be greater than zero."; return; }
+        if (form.CurrentAmount < 0) { formError = "Current amount cannot be negative."; return; }
+
+        saving = true;
+        try
+        {
+            if (editing is null)
+            {
+                var created = await Api.CreateAsync(new CreateSavingsGoalRequest(form.Name, form.TargetAmount, form.CurrentAmount, form.TargetDate));
+                goals.Add(created);
+                NotificationService.Notify(Radzen.NotificationSeverity.Success, "Goal added", created.Name);
+            }
+            else
+            {
+                var updated = await Api.UpdateAsync(editing.Value, new UpdateSavingsGoalRequest(form.Name, form.TargetAmount, form.CurrentAmount, form.TargetDate));
+                var idx = goals.FindIndex(g => g.Id == editing.Value);
+                if (idx >= 0) goals[idx] = updated;
+                NotificationService.Notify(Radzen.NotificationSeverity.Success, "Goal updated", updated.Name);
+                editing = null;
+            }
+            form = new FormModel();
+        }
+        catch (Exception ex)
+        {
+            formError = ex.Message;
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void StartEdit(SavingsGoalDto goal)
+    {
+        editing = goal.Id;
+        form = new FormModel
+        {
+            Name = goal.Name,
+            TargetAmount = goal.TargetAmount,
+            CurrentAmount = goal.CurrentAmount,
+            TargetDate = goal.TargetDate
+        };
+        formError = null;
+    }
+
+    private void CancelEdit()
+    {
+        editing = null;
+        form = new FormModel();
+        formError = null;
+    }
+
+    private async Task DeleteGoal(Guid id)
+    {
+        try
+        {
+            await Api.DeleteAsync(id);
+            goals.RemoveAll(g => g.Id == id);
+            NotificationService.Notify(Radzen.NotificationSeverity.Info, "Goal deleted", "");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(Radzen.NotificationSeverity.Error, "Error", ex.Message);
+        }
+    }
+
+    private sealed class FormModel
+    {
+        public string Name { get; set; } = "";
+        public decimal TargetAmount { get; set; } = 1000m;
+        public decimal CurrentAmount { get; set; } = 0m;
+        public DateOnly? TargetDate { get; set; }
+    }
+}

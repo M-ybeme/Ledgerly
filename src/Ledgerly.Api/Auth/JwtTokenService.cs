@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Ledgerly.Contracts.Auth;
 using Ledgerly.Infrastructure.Auth;
@@ -13,19 +14,25 @@ public sealed class JwtTokenService
     private readonly string _secret;
     private readonly string _issuer;
     private readonly string _audience;
-    private readonly int _expiryHours;
+    private readonly int _expiryMinutes;
 
     public JwtTokenService(IConfiguration config)
     {
         _secret = config["Jwt:Secret"] ?? throw new InvalidOperationException("Jwt:Secret is not configured.");
         _issuer = config["Jwt:Issuer"] ?? "Ledgerly";
         _audience = config["Jwt:Audience"] ?? "LedgerlyUsers";
-        _expiryHours = int.TryParse(config["Jwt:ExpiryHours"], out var h) ? h : 24;
+        // ExpiryMinutes preferred; fall back to ExpiryHours for backwards-compat
+        if (int.TryParse(config["Jwt:ExpiryMinutes"], out var m))
+            _expiryMinutes = m;
+        else if (int.TryParse(config["Jwt:ExpiryHours"], out var h))
+            _expiryMinutes = h * 60;
+        else
+            _expiryMinutes = 15;
     }
 
     public AuthTokenDto GenerateToken(ApplicationUser user)
     {
-        var expiresUtc = DateTime.UtcNow.AddHours(_expiryHours);
+        var expiresUtc = DateTime.UtcNow.AddMinutes(_expiryMinutes);
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
@@ -47,5 +54,13 @@ public sealed class JwtTokenService
             new JwtSecurityTokenHandler().WriteToken(token),
             user.Email!,
             expiresUtc);
+    }
+
+    /// <summary>Generates a cryptographically random refresh token string (not stored — caller stores the hash).</summary>
+    public static (string Raw, string Hash) GenerateRefreshToken()
+    {
+        var raw = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var hash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
+        return (raw, hash);
     }
 }

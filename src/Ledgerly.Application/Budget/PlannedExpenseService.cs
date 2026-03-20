@@ -76,6 +76,22 @@ public sealed class PlannedExpenseService
         expense.ActualAmount = req.ActualAmount;
         expense.PaidDate = req.PaidDate;
 
+        if (expense.IsRecurring)
+        {
+            var nextDue = expense.DueDate.AddMonths(1);
+            var next = new PlannedExpense
+            {
+                UserId = expense.UserId,
+                Description = expense.Description,
+                PlannedAmount = expense.PlannedAmount,
+                DueDate = nextDue,
+                CategoryId = expense.CategoryId,
+                IsRecurring = true,
+                Priority = expense.Priority
+            };
+            await _repo.AddAsync(next, ct);
+        }
+
         await _repo.SaveChangesAsync(ct);
 
         var catNames = await BuildCategoryNameMapAsync([expense], ct);

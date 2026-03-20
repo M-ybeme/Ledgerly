@@ -6,6 +6,7 @@
 @inject AuthTokenService AuthTokenService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject IConfiguration Config
 
 <PageTitle>Login — Ledgerly</PageTitle>
 
@@ -22,27 +23,53 @@
             <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="false" style="margin-bottom:1rem;">@resendMessage</RadzenAlert>
         }
 
-        <div style="margin-bottom:1rem;">
-            <RadzenLabel Text="Email" />
-            <RadzenTextBox @bind-Value="email" Placeholder="@emailPlaceholder" Style="display:block; width:100%;" />
-        </div>
-        <div style="margin-bottom:1.5rem;">
-            <RadzenLabel Text="Password" />
-            <RadzenPassword @bind-Value="password" Style="display:block; width:100%;" />
-        </div>
-
-        <RadzenButton Text="Sign In" ButtonStyle="ButtonStyle.Primary" Style="width:100%;" Click="@Submit" Disabled="@loading" />
-        <RadzenButton Text="Try the Demo" ButtonStyle="ButtonStyle.Light" Style="width:100%; margin-top:0.5rem;" Click="@SignInAsDemo" Disabled="@loading" />
-
-        @if (emailNotConfirmed)
+        @if (!requiresTwoFactor)
         {
-            <RadzenButton Text="Resend confirmation email" ButtonStyle="ButtonStyle.Light" Style="width:100%; margin-top:0.5rem;" Click="@ResendConfirmation" Disabled="@loading" />
-        }
+            <div style="margin-bottom:1rem;">
+                <RadzenLabel Text="Email" />
+                <RadzenTextBox @bind-Value="email" Placeholder="@emailPlaceholder" Style="display:block; width:100%;" />
+            </div>
+            <div style="margin-bottom:1.5rem;">
+                <RadzenLabel Text="Password" />
+                <RadzenPassword @bind-Value="password" Style="display:block; width:100%;" />
+            </div>
 
-        <div style="margin-top:1rem; text-align:center; font-size:0.9em;">
-            <a href="/register">Create an account</a> &nbsp;|&nbsp;
-            <a href="/forgot-password">Forgot password?</a>
-        </div>
+            <RadzenButton Text="Sign In" ButtonStyle="ButtonStyle.Primary" Style="width:100%;" Click="@Submit" Disabled="@loading" />
+            <RadzenButton Text="Try the Demo" ButtonStyle="ButtonStyle.Light" Style="width:100%; margin-top:0.5rem;" Click="@SignInAsDemo" Disabled="@loading" />
+
+            <div style="display:flex; align-items:center; gap:.75rem; margin:.75rem 0;">
+                <hr style="flex:1; border-color:var(--ld-border-color);" />
+                <span style="color:var(--ld-text-secondary); font-size:.85em;">or</span>
+                <hr style="flex:1; border-color:var(--ld-border-color);" />
+            </div>
+
+            <a href="@googleLoginUrl" style="display:flex; align-items:center; justify-content:center; gap:.6rem; width:100%; padding:.6rem 1rem; border:1px solid var(--ld-border-color); border-radius:6px; text-decoration:none; color:var(--ld-text-primary); background:var(--ld-bg-surface);">
+                <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                Sign in with Google
+            </a>
+
+            @if (emailNotConfirmed)
+            {
+                <RadzenButton Text="Resend confirmation email" ButtonStyle="ButtonStyle.Light" Style="width:100%; margin-top:0.5rem;" Click="@ResendConfirmation" Disabled="@loading" />
+            }
+
+            <div style="margin-top:1rem; text-align:center; font-size:0.9em;">
+                <a href="/register">Create an account</a> &nbsp;|&nbsp;
+                <a href="/forgot-password">Forgot password?</a>
+            </div>
+        }
+        else
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="false" style="margin-bottom:1rem;">
+                Enter the 6-digit code from your authenticator app.
+            </RadzenAlert>
+            <div style="margin-bottom:1.5rem;">
+                <RadzenLabel Text="Authenticator Code" />
+                <RadzenTextBox @bind-Value="totpCode" Placeholder="000000" Style="display:block; width:100%; letter-spacing:.2em; font-size:1.1em;" />
+            </div>
+            <RadzenButton Text="Verify" ButtonStyle="ButtonStyle.Primary" Style="width:100%;" Click="@SubmitTwoFactor" Disabled="@loading" />
+            <RadzenButton Text="Back" ButtonStyle="ButtonStyle.Light" Style="width:100%; margin-top:0.5rem;" Click="@CancelTwoFactor" Disabled="@loading" />
+        }
     </RadzenCard>
 </div>
 
@@ -50,11 +77,16 @@
     private readonly string emailPlaceholder = "you@example.com";
     private string email = "";
     private string password = "";
+    private string totpCode = "";
     private string? errorMessage;
     private string? resendMessage;
     private bool loading;
     private bool emailNotConfirmed;
     private bool showResend;
+    private bool requiresTwoFactor;
+
+    private string googleLoginUrl =>
+        $"{Config["Api:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5122"}/auth/google/login";
 
     private async Task Submit()
     {
@@ -65,11 +97,16 @@
         loading = true;
         try
         {
-            var dto = await AuthApi.LoginAsync(new LoginRequest(email, password));
-            await JS.InvokeVoidAsync("localStorage.setItem", "authToken", dto.Token);
-            await JS.InvokeVoidAsync("localStorage.setItem", "authEmail", dto.Email);
-            AuthTokenService.SetToken(dto);
-            Nav.NavigateTo("/");
+            var result = await AuthApi.LoginAsync(new LoginRequest(email, password));
+            if (result.RequiresTwoFactor)
+            {
+                requiresTwoFactor = true;
+                totpCode = "";
+            }
+            else
+            {
+                await StoreTokenAndNavigate(new AuthTokenDto(result.Token!, result.Email!, result.ExpiresUtc, result.RefreshToken));
+            }
         }
         catch (Exception ex)
         {
@@ -81,6 +118,42 @@
         {
             loading = false;
         }
+    }
+
+    private async Task SubmitTwoFactor()
+    {
+        errorMessage = null;
+        loading = true;
+        try
+        {
+            var dto = await AuthApi.VerifyTwoFactorLoginAsync(new TwoFactorLoginRequest(email, password, totpCode));
+            await StoreTokenAndNavigate(dto);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void CancelTwoFactor()
+    {
+        requiresTwoFactor = false;
+        totpCode = "";
+        errorMessage = null;
+    }
+
+    private async Task StoreTokenAndNavigate(AuthTokenDto dto)
+    {
+        await JS.InvokeVoidAsync("localStorage.setItem", "authToken", dto.Token);
+        await JS.InvokeVoidAsync("localStorage.setItem", "authEmail", dto.Email);
+        if (dto.RefreshToken is not null)
+            await JS.InvokeVoidAsync("localStorage.setItem", "refreshToken", dto.RefreshToken);
+        AuthTokenService.SetToken(dto, dto.RefreshToken);
+        Nav.NavigateTo("/");
     }
 
     private Task SignInAsDemo()

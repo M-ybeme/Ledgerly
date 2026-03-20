@@ -1,23 +1,58 @@
 using System.Text;
+using System.Threading.RateLimiting;
+using Serilog;
+using Serilog.Events;
 using Ledgerly.Api.Auth;
 using Ledgerly.Infrastructure.Auth;
 using Ledgerly.Application.Accounts;
 using Ledgerly.Application.Auth;
 using Ledgerly.Application.Budget;
 using Ledgerly.Application.Credit;
+using Ledgerly.Application.Dashboard;
 using Ledgerly.Application.Debts;
 using Ledgerly.Application.Income;
 using Ledgerly.Application.Scenarios;
+using Ledgerly.Infrastructure.Services;
 using Ledgerly.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File("logs/ledgerly-.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 7,
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
+
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
+
+// Rate limiting — auth endpoints only (5 requests / 60 seconds per IP)
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddSlidingWindowLimiter("auth", o =>
+    {
+        o.PermitLimit = 5;
+        o.Window = TimeSpan.FromSeconds(60);
+        o.SegmentsPerWindow = 6;
+        o.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        o.QueueLimit = 0;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
+// Health checks
+builder.Services.AddHealthChecks()
+    .AddNpgSql(builder.Configuration.GetConnectionString("LedgerlyDb")!);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -38,6 +73,9 @@ builder.Services.AddScoped<CreditScoreService>();
 builder.Services.AddScoped<IncomeSourceService>();
 builder.Services.AddScoped<PlannedExpenseService>();
 builder.Services.AddScoped<MonthlyBudgetService>();
+builder.Services.AddScoped<FinancialSummaryService>();
+builder.Services.AddScoped<SavingsGoalService>();
+builder.Services.AddHostedService<OverdueExpenseNotifier>();
 
 // Auth services
 builder.Services.AddHttpContextAccessor();
@@ -62,6 +100,24 @@ builder.Services.AddAuthentication()
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
         };
+    })
+    .AddCookie("ExternalCookie", options =>
+    {
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.HttpOnly = true;
+        options.Cookie.IsEssential = true;
+    })
+    .AddGoogle(options =>
+    {
+        options.ClientId = builder.Configuration["Google:ClientId"] ?? "";
+        options.ClientSecret = builder.Configuration["Google:ClientSecret"] ?? "";
+        options.CallbackPath = "/signin-google"; // middleware handles OAuth response here
+        options.SignInScheme = "ExternalCookie";
+        options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+        options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.CorrelationCookie.HttpOnly = true;
+        options.CorrelationCookie.IsEssential = true;
     });
 
 builder.Services.AddAuthorization();
@@ -114,7 +170,9 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 });
 
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health");
 app.Run();

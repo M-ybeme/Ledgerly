@@ -1,0 +1,255 @@
+@page "/settings"
+@rendermode InteractiveServer
+@using Ledgerly.Contracts.Auth
+@implements IDisposable
+@inject Ledgerly.Web.Services.AuthApiClient AuthApi
+@inject Ledgerly.Web.Services.ExportApiClient ExportApi
+@inject Ledgerly.Web.Auth.AuthTokenService AuthTokenService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject Radzen.NotificationService NotificationService
+
+<PageTitle>Settings — Ledgerly</PageTitle>
+
+<h3>Settings</h3>
+
+<div style="max-width:560px;">
+
+    @* ── Change Password ── *@
+    <RadzenCard class="rz-mb-4">
+        <RadzenText TextStyle="TextStyle.H6" style="margin-bottom:.5rem;">Password</RadzenText>
+        <p style="margin-bottom:1rem; color:var(--ld-text-secondary);">Update your account password.</p>
+        <RadzenButton Text="Change Password" ButtonStyle="ButtonStyle.Light" Click="@(() => Nav.NavigateTo("/change-password"))" />
+    </RadzenCard>
+
+    @* ── Export Data ── *@
+    <RadzenCard class="rz-mb-4">
+        <RadzenText TextStyle="TextStyle.H6" style="margin-bottom:.5rem;">Export Your Data</RadzenText>
+        <p style="margin-bottom:1rem; color:var(--ld-text-secondary);">
+            Download a full snapshot of your financial data. JSON includes all details; CSV is a ZIP of spreadsheet-friendly files.
+        </p>
+        @if (exportError is not null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="false" style="margin-bottom:1rem;">@exportError</RadzenAlert>
+        }
+        <div style="display:flex; gap:.75rem; flex-wrap:wrap;">
+            <RadzenButton Text="Download JSON" Icon="download" ButtonStyle="ButtonStyle.Primary"
+                          Click="@DownloadJson" Disabled="@exportLoading" />
+            <RadzenButton Text="Download CSV (ZIP)" Icon="folder_zip" ButtonStyle="ButtonStyle.Light"
+                          Click="@DownloadCsv" Disabled="@exportLoading" />
+        </div>
+    </RadzenCard>
+
+    @* ── Two-Factor Authentication ── *@
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.H6" style="margin-bottom:.5rem;">Two-Factor Authentication (2FA)</RadzenText>
+
+        @if (statusLoading)
+        {
+            <p>Loading…</p>
+        }
+        else if (twoFactorEnabled)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Success" ShowIcon="false" style="margin-bottom:1rem;">
+                2FA is <strong>enabled</strong>. Your account is protected with an authenticator app.
+            </RadzenAlert>
+            @if (disableError is not null)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="false" style="margin-bottom:1rem;">@disableError</RadzenAlert>
+            }
+            <RadzenButton Text="Disable 2FA" ButtonStyle="ButtonStyle.Danger" Click="@DisableTwoFactor" Disabled="@actionLoading" />
+        }
+        else if (!showSetup)
+        {
+            <p style="margin-bottom:1rem; color:var(--ld-text-secondary);">
+                Add an extra layer of security. You'll need an authenticator app such as
+                Google Authenticator, Authy, or Microsoft Authenticator.
+            </p>
+            @if (setupError is not null)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="false" style="margin-bottom:1rem;">@setupError</RadzenAlert>
+            }
+            <RadzenButton Text="Set Up 2FA" ButtonStyle="ButtonStyle.Primary" Click="@StartSetup" Disabled="@actionLoading" />
+        }
+        else
+        {
+            @* Setup flow *@
+            @if (setupError is not null)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="false" style="margin-bottom:1rem;">@setupError</RadzenAlert>
+            }
+
+            @if (!setupConfirmed)
+            {
+                <p style="margin-bottom:1rem; color:var(--ld-text-secondary);">
+                    Scan the QR code with your authenticator app, then enter the 6-digit code to confirm.
+                </p>
+
+                @if (setupDto is not null)
+                {
+                    <div style="text-align:center; margin-bottom:1rem;">
+                        <img src="data:image/png;base64,@setupDto.QrCodeBase64"
+                             alt="Scan this QR code"
+                             style="width:200px; height:200px; border:4px solid var(--ld-border-color); border-radius:8px;" />
+                    </div>
+                    <details style="margin-bottom:1rem;">
+                        <summary style="cursor:pointer; color:var(--ld-text-secondary); font-size:.85em;">Can't scan? Enter code manually</summary>
+                        <code style="display:block; margin-top:.5rem; word-break:break-all; font-size:.9em; background:var(--ld-bg-surface); padding:.5rem; border-radius:4px;">@setupDto.SecretKey</code>
+                    </details>
+                }
+
+                <div style="margin-bottom:1rem;">
+                    <RadzenLabel Text="Verification Code" />
+                    <RadzenTextBox @bind-Value="verifyCode" Placeholder="000000"
+                                   Style="display:block; width:100%; letter-spacing:.2em; font-size:1.1em;" />
+                </div>
+                <div style="display:flex; gap:.5rem;">
+                    <RadzenButton Text="Confirm &amp; Enable" ButtonStyle="ButtonStyle.Primary" Click="@ConfirmEnable" Disabled="@actionLoading" />
+                    <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="@CancelSetup" Disabled="@actionLoading" />
+                </div>
+            }
+            else
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Success" ShowIcon="false">
+                    2FA has been enabled successfully! Your account is now protected.
+                </RadzenAlert>
+            }
+        }
+    </RadzenCard>
+</div>
+
+@code {
+    private bool exportLoading;
+    private string? exportError;
+
+    private async Task DownloadJson()
+    {
+        exportError = null;
+        exportLoading = true;
+        try
+        {
+            var bytes = await ExportApi.ExportJsonAsync();
+            var b64 = Convert.ToBase64String(bytes);
+            var filename = $"ledgerly-export-{DateTime.Today:yyyyMMdd}.json";
+            await JS.InvokeVoidAsync("downloadBase64File", b64, filename, "application/json");
+        }
+        catch (Exception ex) { exportError = ex.Message; }
+        finally { exportLoading = false; }
+    }
+
+    private async Task DownloadCsv()
+    {
+        exportError = null;
+        exportLoading = true;
+        try
+        {
+            var bytes = await ExportApi.ExportCsvAsync();
+            var b64 = Convert.ToBase64String(bytes);
+            var filename = $"ledgerly-export-{DateTime.Today:yyyyMMdd}.zip";
+            await JS.InvokeVoidAsync("downloadBase64File", b64, filename, "application/zip");
+        }
+        catch (Exception ex) { exportError = ex.Message; }
+        finally { exportLoading = false; }
+    }
+
+    private bool statusLoading = true;
+    private bool actionLoading;
+    private bool twoFactorEnabled;
+    private bool showSetup;
+    private bool setupConfirmed;
+    private TwoFactorSetupDto? setupDto;
+    private string verifyCode = "";
+    private string? setupError;
+    private string? disableError;
+
+    protected override void OnInitialized()
+    {
+        AuthTokenService.OnChange += OnTokenChanged;
+        if (AuthTokenService.IsInitialized)
+            _ = LoadStatusAsync();
+    }
+
+    private async void OnTokenChanged()
+    {
+        if (AuthTokenService.IsInitialized && statusLoading)
+            await LoadStatusAsync();
+    }
+
+    private async Task LoadStatusAsync()
+    {
+        try { twoFactorEnabled = await AuthApi.GetTwoFactorStatusAsync(); }
+        catch { /* unauthenticated — leave default */ }
+        finally { statusLoading = false; await InvokeAsync(StateHasChanged); }
+    }
+
+    public void Dispose() => AuthTokenService.OnChange -= OnTokenChanged;
+
+
+    private async Task StartSetup()
+    {
+        actionLoading = true;
+        setupError = null;
+        try
+        {
+            setupDto = await AuthApi.GetTwoFactorSetupAsync();
+            showSetup = true;
+            setupConfirmed = false;
+            verifyCode = "";
+        }
+        catch (Exception ex)
+        {
+            setupError = ex.Message;
+        }
+        finally
+        {
+            actionLoading = false;
+        }
+    }
+
+    private async Task ConfirmEnable()
+    {
+        setupError = null;
+        actionLoading = true;
+        try
+        {
+            await AuthApi.EnableTwoFactorAsync(new VerifyTwoFactorRequest(verifyCode));
+            twoFactorEnabled = true;
+            setupConfirmed = true;
+        }
+        catch (Exception ex)
+        {
+            setupError = ex.Message;
+        }
+        finally
+        {
+            actionLoading = false;
+        }
+    }
+
+    private void CancelSetup()
+    {
+        showSetup = false;
+        setupDto = null;
+        verifyCode = "";
+        setupError = null;
+    }
+
+    private async Task DisableTwoFactor()
+    {
+        disableError = null;
+        actionLoading = true;
+        try
+        {
+            await AuthApi.DisableTwoFactorAsync();
+            twoFactorEnabled = false;
+        }
+        catch (Exception ex)
+        {
+            disableError = ex.Message;
+        }
+        finally
+        {
+            actionLoading = false;
+        }
+    }
+}

@@ -20,9 +20,14 @@ public static class DbSeeder
         await using var scope = services.CreateAsyncScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-        // If user already exists the data was already seeded — nothing to do.
-        if (await userManager.FindByEmailAsync(DemoEmail) is not null)
+        // If user already exists the data was already seeded — just ensure 2FA stays off.
+        var existingDemo = await userManager.FindByEmailAsync(DemoEmail);
+        if (existingDemo is not null)
+        {
+            if (await userManager.GetTwoFactorEnabledAsync(existingDemo))
+                await userManager.SetTwoFactorEnabledAsync(existingDemo, false);
             return;
+        }
 
         var user = new ApplicationUser
         {

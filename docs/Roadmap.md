@@ -1,6 +1,6 @@
-# Ledgerly — Architecture-First Roadmap (v4)
+# Ledgerly — Architecture-First Roadmap (v8)
 
-*Last Updated: Mar 14, 2026 — Phase 8 (Dashboard & UX Enhancements) complete; Export remaining for v1.0*
+*Last Updated: Mar 19, 2026 — Phase 11 complete; recurring transactions, savings goals, Google OAuth, refresh tokens, rate limiting, health checks, and Serilog all live*
 
 ---
 
@@ -47,11 +47,11 @@ The minimum feature set to call this a complete v1.0:
 * [X] Log actual payments; see updated payoff timeline
 * [X] JWT Authentication + user isolation
 * [X] Deployed to production (Railway)
-* [ ] Export (CSV or JSON)
+* [X] Export (CSV or JSON)
 
 ---
 
-# Current Status (As of Mar 14, 2026)
+# Current Status (As of Mar 19, 2026)
 
 ## Completed
 
@@ -73,10 +73,26 @@ The minimum feature set to call this a complete v1.0:
   * Dark/light theme
   * Mobile-responsive navbar
   * Demo data seeder
+* **Two-Factor Authentication (Phase 9 complete)**
+  * TOTP via authenticator apps (Google Authenticator, Authy, etc.)
+  * QR code + manual key setup flow in Settings
+  * Login challenge step when 2FA is enabled
+  * Demo account permanently exempt from 2FA
+* **Export, Net Worth Chart & Overdue Notifications (Phase 10 complete)**
+  * Export: `GET /export/json` (full snapshot) + `GET /export/csv` (ZIP of CSVs) with browser download
+  * Net Savings Trend: 12-month cumulative savings chart on dashboard (line + bar)
+  * Overdue notifications: daily background service emails users about unpaid expenses due within past 14 days
+* **Security Hardening, Auth Improvements & New Features (Phase 11 complete)**
+  * Rate limiting: sliding window (5 req/60s per IP) on all auth endpoints
+  * Health check: `GET /health` with Npgsql connectivity probe
+  * Refresh tokens: 15-min JWTs + 30-day rotating refresh tokens; silent auto-refresh in Web every 12 min
+  * Google OAuth: "Sign in with Google" on login page; ExternalCookie + `/auth/google/complete` redirect flow
+  * Serilog: structured logging to console + rolling file; EF/ASP noise filtered to Warning
+  * Recurring transactions: marking a recurring `PlannedExpense` as paid auto-creates next month's copy
+  * Savings goals: full CRUD (`SavingsGoal` entity, `/savings-goals` API, Savings Goals page with progress bars)
+  * Dashboard chart fix: replaced `RadzenBarSeries` with `RadzenColumnSeries` for all vertical bar charts
 
-## Not Yet Implemented
-
-* Export (CSV / JSON) — last remaining v1.0 item
+## All v1.0 Items Complete ✓
 
 ---
 
@@ -495,7 +511,7 @@ The minimum bar to call this a shipped v1.0 product:
 * [X] Reality tracking: actual payments logged, drift shown, projection updated
 * [X] Authentication + user isolation working
 * [X] Deployed and publicly accessible
-* [ ] Export working (CSV or JSON) ← last remaining item
+* [X] Export working (CSV + JSON)
 
 ---
 
@@ -518,14 +534,102 @@ What a technical reviewer evaluating the project would assess:
 
 These are genuinely optional features that extend the product after v1.0:
 
-* [ ] Export (CSV / JSON) — full user data snapshot; last v1.0 blocker
+* [X] Export (CSV / JSON) — full user data snapshot
 * [ ] CSV bank import — upload a bank statement, auto-categorize transactions
 * [ ] Multi-currency support
 * [ ] Public read-only share links — share a scenario view without requiring login
 * [ ] Strategy comparison dashboard (enhanced visualization of Phase 3 comparison)
-* [ ] Push/email notifications for overdue planned expenses
-* [ ] Account balance tracking over time (net worth chart)
+* [X] Push/email notifications for overdue planned expenses
+* [X] Account balance tracking over time (net worth chart)
 
 ---
 
-End of Roadmap v4
+## Phase 9 — Two-Factor Authentication (Complete)
+
+### TOTP via Authenticator App
+
+* [X] `QRCoder` NuGet added to Api project — generates QR code PNG as Base64
+* [X] `LoginResultDto` — new login response that signals `RequiresTwoFactor` when 2FA is enrolled
+* [X] `POST /auth/login` — returns `RequiresTwoFactor: true` instead of JWT when user has 2FA enabled
+* [X] `POST /auth/2fa/verify-login` — validates email + password + TOTP code, returns JWT
+* [X] `GET /auth/2fa/setup` — `[Authorize]` — generates authenticator key + QR code for setup page
+* [X] `GET /auth/2fa/status` — `[Authorize]` — returns `{isEnabled}` for Settings page
+* [X] `POST /auth/2fa/enable` — `[Authorize]` — verifies first code and calls `SetTwoFactorEnabledAsync`
+* [X] `POST /auth/2fa/disable` — `[Authorize]` — disables 2FA and resets authenticator key
+* [X] Login.razor — two-step UI: password step then TOTP code step (no page navigation)
+* [X] Settings.razor — new page at `/settings`; shows 2FA status, QR code setup flow, enable/disable
+* [X] NavMenu "Settings" link updated to `/settings`; Change Password accessible from Settings page
+* [X] Demo user (`demo@ledgerly.dev`) — seeder explicitly disables 2FA on every startup; shared demo account always accessible
+
+### Local Testing Bug Fixes (Mar 19, 2026)
+
+* [X] `Web:BaseUrl` in `appsettings.Development.json` corrected to `localhost:5136` (email confirmation links were pointing to wrong port)
+* [X] `AuthApiClient` updated to inject `AuthTokenService` and use per-request `Authorization` headers for all `[Authorize]` endpoints (2FA setup/status/enable/disable, change-password)
+* [X] Settings.razor updated to defer `GetTwoFactorStatusAsync` call until after `AuthTokenService` is initialized (avoids 401 on page load before localStorage token is restored)
+* [X] Setup error now displayed in the pre-setup state so failures surface visibly
+
+Outcome:
+[X] Users can secure their account with any TOTP authenticator app. Zero additional cost (no SMS, no third-party service). Demo account remains freely accessible.
+
+---
+
+## Phase 10 — Export, Net Worth Chart & Overdue Notifications (Complete)
+
+### Export (CSV + JSON)
+
+* [X] `GET /export/json` — `[Authorize]` — full user data snapshot as a downloadable JSON file
+* [X] `GET /export/csv` — `[Authorize]` — ZIP archive containing separate CSVs: accounts, debts, income sources, planned expenses, budget categories, transactions, scenarios
+* [X] `ExportController` uses all existing services (auto-scoped to current user via query filters)
+* [X] `ExportApiClient` in Web downloads raw bytes; `downloadBase64File` JS helper triggers browser save dialog
+* [X] Export buttons (JSON + CSV) added to Settings page
+
+### Net Savings Trend Chart
+
+* [X] `FinancialSummaryService` in Application — queries 12 months of transactions, groups by CategoryType, computes monthly net + cumulative running total
+* [X] `GET /dashboard/financial-summary` — returns `FinancialSummaryDto` with `TotalDebt`, `CumulativeSavings`, and 12 monthly snapshots
+* [X] `DashboardApiClient` in Web
+* [X] Dashboard (Home.razor) — "Net Savings Trend (12 Months)" card with cumulative line/area + monthly bar chart; loads in parallel with other dashboard data
+
+### Overdue Expense Notifications
+
+* [X] `OverdueExpenseNotifier : BackgroundService` in Infrastructure — runs every 24 hours
+* [X] Queries all users' unpaid planned expenses due within the past 14 days using `IgnoreQueryFilters()`
+* [X] Groups by user, fetches email from Identity, sends HTML reminder email via `IEmailService` (SendGrid)
+* [X] Email includes due description, date, amount, and a link back to `/planned-expenses`
+* [X] Registered as `AddHostedService<OverdueExpenseNotifier>()` in API Program.cs
+
+### Local Testing Bug Fixes (Mar 19, 2026)
+
+* [X] `SendGrid:ApiKey` populated in `appsettings.Development.json` with real key; `ledgerly.noreply@gmail.com` verified as Single Sender in SendGrid dashboard
+* [X] Email confirmation flow end-to-end tested with Mailinator
+
+Outcome:
+[X] v1.0 is complete. Users can export their data, see savings progress over time, and receive timely reminders about overdue bills.
+
+---
+
+## Phase 11 — Security Hardening, Auth Improvements & New Features (Complete)
+
+### Security Hardening
+
+* [X] **Rate limiting on auth endpoints** — `AddRateLimiter` (built-in .NET 8) applied to `/auth/register`, `/auth/login`, `/auth/forgot-password`, `/auth/resend-confirmation`; sliding window: 5 requests / 60 seconds per IP; returns 429 on violation
+* [X] **Health check endpoint** — `GET /health` via `AddHealthChecks().AddNpgSql(...)` with Npgsql database connectivity probe; suitable for Railway uptime monitoring
+
+### Auth Improvements
+
+* [X] **Refresh tokens** — `RefreshToken` entity with SHA256-hashed token stored in DB; 15-min JWTs + 30-day refresh tokens; `POST /auth/refresh` rotates (revokes old, issues new); Web auto-refreshes every 12 min via `Routes.razor` timer; token stored in `localStorage` as `refreshToken`; `POST /auth/logout` revokes server-side; `AddRefreshTokens` migration
+* [X] **Google OAuth** — `Microsoft.AspNetCore.Authentication.Google` v8.0.0; "Sign in with Google" button on Login page; `GET /auth/google/login` initiates challenge; middleware handles `/signin-google` callback; `GET /auth/google/complete` issues JWT + refresh token; redirects to Web `/oauth-callback` page; new users auto-created with `EmailConfirmed = true`; `OAuthCallback.razor` page stores tokens and navigates home
+
+### New Features
+
+* [X] **Recurring transactions** — `PlannedExpenseService.MarkPaidAsync` automatically creates next month's copy when `IsRecurring` is true; same description, amount, category, and priority; new copy has `DueDate` advanced by one month, no paid state
+* [X] **Savings goals** — `SavingsGoal` entity (Name, TargetAmount, CurrentAmount, TargetDate, computed Progress/Remaining); full CRUD at `GET/POST/PUT/DELETE /savings-goals`; `SavingsGoals.razor` page with inline add/edit form and color-coded progress bars (green ≥100%, amber ≥60%, blue otherwise); `AddSavingsGoals` migration; "Savings Goals" nav link added
+* [X] **Dashboard chart fix** — replaced all `RadzenBarSeries` with `RadzenColumnSeries` for vertical bar charts; removed duplicate `RadzenAreaSeries` from Net Savings Trend that was causing a blank chart
+
+### Observability
+
+* [X] **Structured logging with Serilog** — `Serilog.AspNetCore` v8.0.3 + Console + File sinks; EF Database Command and ASP.NET noise filtered to Warning; rolling daily log files at `logs/ledgerly-.log` (7-day retention); `builder.Host.UseSerilog()` replaces default logger
+
+---
+
+End of Roadmap v8

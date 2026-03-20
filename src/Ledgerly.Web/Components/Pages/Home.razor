@@ -5,10 +5,12 @@
 @using Ledgerly.Contracts.Income
 @using Ledgerly.Domain.Budget
 @using Ledgerly.Web.Components.Pages
+@using Ledgerly.Contracts.Dashboard
 @inject Ledgerly.Web.Services.TransactionsApiClient TransactionsApi
 @inject Ledgerly.Web.Services.DebtAccountsApiClient DebtsApi
 @inject Ledgerly.Web.Services.IncomeSourcesApiClient IncomeSourcesApi
 @inject Ledgerly.Web.Services.PlannedExpensesApiClient PlannedExpensesApi
+@inject Ledgerly.Web.Services.DashboardApiClient DashboardApi
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 @inject NavigationManager Nav
@@ -79,15 +81,15 @@ else
             }
             else
             {
-                <RadzenChart Style="height:240px; width:100%;">
-                    <RadzenBarSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="ExpectedIncome"
-                                     Title="Expected Income" Fill="#a8d58a" />
-                    <RadzenBarSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="Income"
-                                     Title="Actual Income" Fill="#6aab3e" />
-                    <RadzenBarSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="PlannedExpenses"
-                                     Title="Planned Expenses" Fill="#f0a070" />
-                    <RadzenBarSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="Expenses"
-                                     Title="Actual Expenses" Fill="#e05c5c" />
+                <RadzenChart Style="height:280px; width:100%;">
+                    <RadzenColumnSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="ExpectedIncome"
+                                        Title="Expected Income" Fill="#a8d58a" />
+                    <RadzenColumnSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="Income"
+                                        Title="Actual Income" Fill="#6aab3e" />
+                    <RadzenColumnSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="PlannedExpenses"
+                                        Title="Planned Expenses" Fill="#f0a070" />
+                    <RadzenColumnSeries Data="@monthlyFlow" CategoryProperty="Month" ValueProperty="Expenses"
+                                        Title="Actual Expenses" Fill="#e05c5c" />
                     <RadzenCategoryAxis><RadzenGridLines Visible="false" /></RadzenCategoryAxis>
                     <RadzenValueAxis Formatter="@FormatCurrency"><RadzenGridLines Visible="true" /></RadzenValueAxis>
                     <RadzenLegend Visible="true" />
@@ -102,10 +104,10 @@ else
                 @DateTime.Today.ToString("MMMM yyyy") — expected vs actual
             </RadzenText>
             <RadzenChart Style="height:220px;">
-                <RadzenBarSeries Data="@currentMonthComparison" CategoryProperty="Label" ValueProperty="Expected"
-                                 Title="Expected / Planned" Fill="#5b8dd9" />
-                <RadzenBarSeries Data="@currentMonthComparison" CategoryProperty="Label" ValueProperty="Actual"
-                                 Title="Actual" Fill="#6aab3e" />
+                <RadzenColumnSeries Data="@currentMonthComparison" CategoryProperty="Label" ValueProperty="Expected"
+                                    Title="Expected / Planned" Fill="#5b8dd9" />
+                <RadzenColumnSeries Data="@currentMonthComparison" CategoryProperty="Label" ValueProperty="Actual"
+                                    Title="Actual" Fill="#6aab3e" />
                 <RadzenCategoryAxis><RadzenGridLines Visible="false" /></RadzenCategoryAxis>
                 <RadzenValueAxis Formatter="@FormatCurrency"><RadzenGridLines Visible="true" /></RadzenValueAxis>
                 <RadzenLegend Visible="true" />
@@ -273,14 +275,37 @@ else
         }
     </RadzenCard>
 
+    <!-- Net Worth / Savings Trend -->
+    @if (financialSummary is not null && financialSummary.Months.Any(m => m.Income > 0 || m.Expenses > 0))
+    {
+        <RadzenCard class="rz-mb-6">
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" class="rz-mb-3">
+                <RadzenText TextStyle="TextStyle.H6">Net Savings Trend (12 Months)</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">
+                    Cumulative: <strong style="color:@(financialSummary.CumulativeSavings >= 0 ? "#6aab3e" : "#e05c5c");">@financialSummary.CumulativeSavings.ToString("C0")</strong>
+                </RadzenText>
+            </RadzenStack>
+            <RadzenChart Style="height:200px; width:100%;">
+                <RadzenColumnSeries Data="@financialSummary.Months" CategoryProperty="Month" ValueProperty="Net"
+                                    Title="Monthly Net" Fill="#5b8dd9" />
+                <RadzenLineSeries Data="@financialSummary.Months" CategoryProperty="Month" ValueProperty="CumulativeSavings"
+                                  Title="Cumulative Savings" Stroke="#b5d542" StrokeWidth="2.5" />
+                <RadzenCategoryAxis><RadzenGridLines Visible="false" /></RadzenCategoryAxis>
+                <RadzenValueAxis Formatter="@FormatCurrency"><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                <RadzenLegend Visible="true" />
+                <RadzenChartTooltipOptions Shared="false" />
+            </RadzenChart>
+        </RadzenCard>
+    }
+
     <!-- Debt Balances -->
     @if (debts.Count > 0)
     {
         <RadzenCard class="rz-mb-6">
             <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Debt Balances</RadzenText>
             <RadzenChart Style="height:200px;">
-                <RadzenBarSeries Data="@debts" CategoryProperty="Name" ValueProperty="Balance"
-                                 Title="Balance" Fill="#e05c5c" />
+                <RadzenColumnSeries Data="@debts" CategoryProperty="Name" ValueProperty="Balance"
+                                    Title="Balance" Fill="#e05c5c" />
                 <RadzenCategoryAxis><RadzenGridLines Visible="false" /></RadzenCategoryAxis>
                 <RadzenValueAxis Formatter="@FormatCurrency"><RadzenGridLines Visible="true" /></RadzenValueAxis>
                 <RadzenLegend Visible="false" />
@@ -332,6 +357,7 @@ else
     private sealed record PriorityComparison(string Priority, decimal Planned, decimal Paid);
 
     // Data
+    private FinancialSummaryDto? financialSummary;
     private List<DebtAccountDto> debts = [];
     private List<MonthlyFlow> monthlyFlow = [];
     private List<MonthComparison> currentMonthComparison = [];
@@ -381,12 +407,14 @@ else
             var debtsTask = DebtsApi.GetAllAsync();
             var incomeTask = IncomeSourcesApi.GetAllAsync();
             var plannedTask = PlannedExpensesApi.GetAllAsync();
-            await Task.WhenAll(transactionsTask, debtsTask, incomeTask, plannedTask);
+            var summaryTask = DashboardApi.GetFinancialSummaryAsync();
+            await Task.WhenAll(transactionsTask, debtsTask, incomeTask, plannedTask, summaryTask);
 
             var transactions = transactionsTask.Result;
             debts = debtsTask.Result;
             incomeSources = incomeTask.Result;
             plannedExpenses = plannedTask.Result;
+            financialSummary = summaryTask.Result;
 
             totalDebt = debts.Sum(d => d.Balance);
             expectedMonthlyIncome = incomeSources.Sum(s => s.MonthlyAmount);

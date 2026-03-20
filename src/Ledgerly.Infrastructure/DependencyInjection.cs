@@ -41,6 +41,7 @@ public static class DependencyInjection
 
         services.AddScoped<IEmailService, SendGridEmailService>();
 
+        services.AddScoped<ISavingsGoalRepository, EfSavingsGoalRepository>();
         services.AddScoped<IIncomeSourceRepository, EfIncomeSourceRepository>();
         services.AddScoped<IPlannedExpenseRepository, EfPlannedExpenseRepository>();
         services.AddScoped<IMonthlyBudgetRepository, EfMonthlyBudgetRepository>();

@@ -1,7 +1,9 @@
 @using Ledgerly.Contracts.Auth
 @using Ledgerly.Web.Auth
 @using Microsoft.AspNetCore.Components
+@implements IDisposable
 @inject AuthTokenService AuthTokenService
+@inject Ledgerly.Web.Services.AuthApiClient AuthApi
 @inject IJSRuntime JS
 
 <Router AppAssembly="typeof(Program).Assembly">
@@ -33,7 +35,7 @@
     private static readonly HashSet<string> PublicTemplates =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            "login", "register", "forgot-password", "reset-password", "confirm-email"
+            "login", "register", "forgot-password", "reset-password", "confirm-email", "oauth-callback"
         };
 
     private static bool IsPublicPage(RouteData routeData) =>
@@ -42,16 +44,56 @@
             .Cast<RouteAttribute>()
             .Any(a => PublicTemplates.Contains(a.Template.TrimStart('/')));
 
+    private Timer? _refreshTimer;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
 
         var token = await JS.InvokeAsync<string?>("localStorage.getItem", "authToken");
         var email = await JS.InvokeAsync<string?>("localStorage.getItem", "authEmail");
+        var refreshToken = await JS.InvokeAsync<string?>("localStorage.getItem", "refreshToken");
 
         if (token is not null && email is not null)
-            AuthTokenService.SetToken(new AuthTokenDto(token, email, default));
+        {
+            AuthTokenService.SetToken(new AuthTokenDto(token, email, default), refreshToken);
+            ScheduleRefresh();
+        }
         else
+        {
             AuthTokenService.MarkInitialized();
+        }
     }
+
+    private void ScheduleRefresh()
+    {
+        _refreshTimer?.Dispose();
+        // Refresh every 12 minutes (JWT lives 15 min — gives 3-min buffer)
+        _refreshTimer = new Timer(_ => InvokeAsync(RefreshTokenAsync), null,
+            TimeSpan.FromMinutes(12), TimeSpan.FromMinutes(12));
+    }
+
+    private async Task RefreshTokenAsync()
+    {
+        if (AuthTokenService.RefreshToken is null) return;
+        try
+        {
+            var result = await AuthApi.RefreshAsync(AuthTokenService.RefreshToken);
+            await JS.InvokeVoidAsync("localStorage.setItem", "authToken", result.Token);
+            if (result.RefreshToken is not null)
+                await JS.InvokeVoidAsync("localStorage.setItem", "refreshToken", result.RefreshToken);
+            AuthTokenService.SetToken(result, result.RefreshToken);
+            ScheduleRefresh();
+        }
+        catch
+        {
+            // Refresh token expired or revoked — clear session
+            AuthTokenService.ClearToken();
+            await JS.InvokeVoidAsync("localStorage.removeItem", "authToken");
+            await JS.InvokeVoidAsync("localStorage.removeItem", "authEmail");
+            await JS.InvokeVoidAsync("localStorage.removeItem", "refreshToken");
+        }
+    }
+
+    public void Dispose() => _refreshTimer?.Dispose();
 }

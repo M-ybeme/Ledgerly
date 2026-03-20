@@ -35,6 +35,8 @@ public class LedgerlyDbContext : IdentityDbContext<ApplicationUser, IdentityRole
     public DbSet<IncomeSource> IncomeSources => Set<IncomeSource>();
     public DbSet<PlannedExpense> PlannedExpenses => Set<PlannedExpense>();
     public DbSet<MonthlyBudget> MonthlyBudgets => Set<MonthlyBudget>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +52,7 @@ public class LedgerlyDbContext : IdentityDbContext<ApplicationUser, IdentityRole
         modelBuilder.Entity<IncomeSource>().HasQueryFilter(a => a.UserId == _currentUser.UserId);
         modelBuilder.Entity<PlannedExpense>().HasQueryFilter(a => a.UserId == _currentUser.UserId);
         modelBuilder.Entity<MonthlyBudget>().HasQueryFilter(a => a.UserId == _currentUser.UserId);
+        modelBuilder.Entity<SavingsGoal>().HasQueryFilter(g => g.UserId == _currentUser.UserId);
 
         // Phase 1: Scenario ↔ DebtAccount many-to-many
         modelBuilder.Entity<Scenario>()
@@ -112,5 +115,16 @@ public class LedgerlyDbContext : IdentityDbContext<ApplicationUser, IdentityRole
             .HasForeignKey(a => a.DebtAccountId)
             .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // RefreshToken → ApplicationUser (cascade delete)
+        modelBuilder.Entity<RefreshToken>()
+            .HasOne(r => r.User)
+            .WithMany()
+            .HasForeignKey(r => r.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RefreshToken>()
+            .HasIndex(r => r.TokenHash)
+            .IsUnique();
     }
 }

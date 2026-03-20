@@ -39,7 +39,6 @@ builder.Services.AddTransient<BearerTokenHandler>();
 
 var apiBaseUrl = builder.Configuration["Api:BaseUrl"] ?? "http://localhost:5122";
 
-// Public API client (no bearer token — auth endpoints)
 builder.Services.AddHttpClient<AuthApiClient>(client =>
     client.BaseAddress = new Uri(apiBaseUrl));
 
@@ -73,6 +72,15 @@ builder.Services.AddHttpClient<PlannedExpensesApiClient>(client =>
     client.BaseAddress = new Uri(apiBaseUrl));
 
 builder.Services.AddHttpClient<MonthlyBudgetsApiClient>(client =>
+    client.BaseAddress = new Uri(apiBaseUrl));
+
+builder.Services.AddHttpClient<ExportApiClient>(client =>
+    client.BaseAddress = new Uri(apiBaseUrl));
+
+builder.Services.AddHttpClient<DashboardApiClient>(client =>
+    client.BaseAddress = new Uri(apiBaseUrl));
+
+builder.Services.AddHttpClient<SavingsGoalsApiClient>(client =>
     client.BaseAddress = new Uri(apiBaseUrl));
 
 var app = builder.Build();

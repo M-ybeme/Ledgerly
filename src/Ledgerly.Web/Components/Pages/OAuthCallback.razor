@@ -1,0 +1,63 @@
+@page "/oauth-callback"
+@rendermode InteractiveServer
+@using Ledgerly.Contracts.Auth
+@using Ledgerly.Web.Auth
+@inject AuthTokenService AuthTokenService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Signing in… — Ledgerly</PageTitle>
+
+<div style="max-width:400px; margin:80px auto; text-align:center;">
+    @if (error is not null)
+    {
+        <p style="color:red;">@error</p>
+        <a href="/login">Back to Login</a>
+    }
+    else
+    {
+        <p>Signing you in…</p>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Token { get; set; }
+    [SupplyParameterFromQuery] public string? Email { get; set; }
+    [SupplyParameterFromQuery] public string? Refresh { get; set; }
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+
+    private string? error;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        if (Error is not null)
+        {
+            error = Error switch
+            {
+                "google_failed" => "Google sign-in failed. Please try again.",
+                "no_email" => "Google did not provide an email address.",
+                "registration_failed" => "Could not create your account. Please try again.",
+                _ => "Sign-in failed."
+            };
+            StateHasChanged();
+            return;
+        }
+
+        if (Token is null || Email is null)
+        {
+            error = "Invalid callback — missing token.";
+            StateHasChanged();
+            return;
+        }
+
+        await JS.InvokeVoidAsync("localStorage.setItem", "authToken", Token);
+        await JS.InvokeVoidAsync("localStorage.setItem", "authEmail", Email);
+        if (Refresh is not null)
+            await JS.InvokeVoidAsync("localStorage.setItem", "refreshToken", Refresh);
+
+        AuthTokenService.SetToken(new AuthTokenDto(Token, Email, default), Refresh);
+        Nav.NavigateTo("/");
+    }
+}
