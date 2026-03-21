@@ -65,6 +65,25 @@ public class AccountsController : ControllerBase
         }
     }
 
+    // POST /accounts/transfer
+    [HttpPost("transfer")]
+    public async Task<IActionResult> Transfer([FromBody] TransferRequest req, CancellationToken ct)
+    {
+        try
+        {
+            await _svc.TransferAsync(req, ct);
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (ArgumentException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
     // DELETE /accounts/{id}
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)

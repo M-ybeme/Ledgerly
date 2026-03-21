@@ -28,11 +28,14 @@ public sealed class AccountService
     {
         if (string.IsNullOrWhiteSpace(req.Name))
             throw new ArgumentException("Name is required.");
+        if (req.Balance < 0)
+            throw new ArgumentException("Balance cannot be negative.");
 
         var account = new Account
         {
             Name = req.Name.Trim(),
             Type = req.Type,
+            Balance = req.Balance,
             CreatedUtc = DateTime.UtcNow
         };
 
@@ -52,9 +55,28 @@ public sealed class AccountService
 
         account.Name = req.Name.Trim();
         account.Type = req.Type;
+        account.Balance = req.Balance;
 
         await _repo.SaveChangesAsync(ct);
         return ToDto(account);
+    }
+
+    public async Task TransferAsync(TransferRequest req, CancellationToken ct = default)
+    {
+        if (req.Amount <= 0)
+            throw new ArgumentException("Transfer amount must be greater than zero.");
+        if (req.FromAccountId == req.ToAccountId)
+            throw new ArgumentException("Cannot transfer to the same account.");
+
+        var from = await _repo.GetByIdAsync(req.FromAccountId, ct)
+            ?? throw new KeyNotFoundException("Source account not found.");
+        var to = await _repo.GetByIdAsync(req.ToAccountId, ct)
+            ?? throw new KeyNotFoundException("Destination account not found.");
+
+        from.Balance -= req.Amount;
+        to.Balance += req.Amount;
+
+        await _repo.SaveChangesAsync(ct);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
@@ -64,5 +86,5 @@ public sealed class AccountService
     }
 
     private static AccountDto ToDto(Account a) =>
-        new(a.Id, a.Name, a.Type, a.CreatedUtc);
+        new(a.Id, a.Name, a.Type, a.Balance, a.CreatedUtc);
 }

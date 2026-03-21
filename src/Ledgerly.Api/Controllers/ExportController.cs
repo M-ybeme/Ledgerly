@@ -86,26 +86,24 @@ public sealed class ExportController : ControllerBase
         var userId = User.FindFirst("sub")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var user = userId is not null ? await _userManager.FindByIdAsync(userId) : null;
 
-        var accountsTask = _accounts.GetAllAsync();
-        var debtsTask = _debts.GetAllAsync();
-        var incomeTask = _income.GetAllAsync();
-        var expensesTask = _expenses.GetAllAsync();
-        var categoriesTask = _categories.GetAllAsync();
-        var transactionsTask = _transactions.GetAllAsync();
-        var scenariosTask = _scenarios.GetAllAsync();
-
-        await Task.WhenAll(accountsTask, debtsTask, incomeTask, expensesTask, categoriesTask, transactionsTask, scenariosTask);
+        var accounts = await _accounts.GetAllAsync();
+        var debts = await _debts.GetAllAsync();
+        var income = await _income.GetAllAsync();
+        var expenses = await _expenses.GetAllAsync();
+        var categories = await _categories.GetAllAsync();
+        var transactions = await _transactions.GetAllAsync();
+        var scenarios = await _scenarios.GetAllAsync();
 
         return new ExportDto(
             ExportedAt: DateTime.UtcNow,
             Email: user?.Email ?? "",
-            Accounts: accountsTask.Result,
-            Debts: debtsTask.Result,
-            IncomeSources: incomeTask.Result,
-            PlannedExpenses: expensesTask.Result,
-            BudgetCategories: categoriesTask.Result,
-            Transactions: transactionsTask.Result,
-            Scenarios: scenariosTask.Result);
+            Accounts: accounts,
+            Debts: debts,
+            IncomeSources: income,
+            PlannedExpenses: expenses,
+            BudgetCategories: categories,
+            Transactions: transactions,
+            Scenarios: scenarios);
     }
 
     private static void WriteEntry(ZipArchive archive, string name, string content)

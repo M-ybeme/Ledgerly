@@ -3,6 +3,7 @@ using System;
 using Ledgerly.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Ledgerly.Infrastructure.Migrations
 {
     [DbContext(typeof(LedgerlyDbContext))]
-    partial class LedgerlyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260320073706_AddAccountBalance")]
+    partial class AddAccountBalance
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -371,32 +374,6 @@ namespace Ledgerly.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("IncomeSources");
-                });
-
-            modelBuilder.Entity("Ledgerly.Domain.NetWorth.NetWorthSnapshot", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AssetsTotal")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("LiabilitiesTotal")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateOnly>("Month")
-                        .HasColumnType("date");
-
-                    b.Property<decimal>("NetWorth")
-                        .HasColumnType("numeric");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("NetWorthSnapshots");
                 });
 
             modelBuilder.Entity("Ledgerly.Domain.Scenarios.ActualPayment", b =>

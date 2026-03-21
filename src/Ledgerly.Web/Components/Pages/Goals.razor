@@ -1,0 +1,274 @@
+@page "/goals"
+@rendermode InteractiveServer
+@using Ledgerly.Contracts.Goals
+@using Ledgerly.Web.Services
+@using Ledgerly.Web.Auth
+@inject GoalPlannerApiClient GoalApi
+@inject AuthTokenService AuthTokenService
+@implements IDisposable
+
+<PageTitle>Goal Planner — Ledgerly</PageTitle>
+
+<div class="ld-page">
+    <div class="ld-page-header">
+        <h1 class="ld-page-title">Goal Planner</h1>
+        <p class="ld-page-subtitle">Back-calculate what it takes to hit a financial goal — debt-free date, savings target, or spending limit.</p>
+    </div>
+
+    <!-- Goal Type Selector -->
+    <div class="ld-card" style="margin-bottom:1.5rem;">
+        <label class="ld-label">What goal do you want to plan for?</label>
+        <div style="display:flex; gap:.75rem; flex-wrap:wrap; margin-top:.5rem;">
+            <button class="@GoalTypeClass(GoalType.DebtFree)" @onclick="@(() => SelectGoalType(GoalType.DebtFree))">
+                🎯 Be Debt-Free by a Date
+            </button>
+            <button class="@GoalTypeClass(GoalType.SaveAmount)" @onclick="@(() => SelectGoalType(GoalType.SaveAmount))">
+                💰 Save a Target Amount
+            </button>
+            <button class="@GoalTypeClass(GoalType.SpendingCap)" @onclick="@(() => SelectGoalType(GoalType.SpendingCap))">
+                ✂️ Spending Cap
+            </button>
+        </div>
+    </div>
+
+    <!-- Goal Inputs -->
+    <div class="ld-card" style="margin-bottom:1.5rem;">
+        @if (selectedGoalType == GoalType.DebtFree)
+        {
+            <h3 style="margin:0 0 1rem; font-size:1.05rem;">By what date do you want to be completely debt-free?</h3>
+            <div style="display:flex; gap:1.5rem; align-items:flex-end; flex-wrap:wrap;">
+                <div>
+                    <label class="ld-label">Target Date</label>
+                    <RadzenDatePicker @bind-Value="targetDateProxy" DateFormat="MMMM yyyy" ShowTime="false"
+                                      Style="width:200px;" />
+                </div>
+                <RadzenButton Text="Calculate" Click="Calculate" ButtonStyle="ButtonStyle.Primary" IsBusy="loading" />
+            </div>
+            <p style="margin:.75rem 0 0; font-size:.82rem; color:var(--ld-text-secondary);">
+                We'll use your current debt balances and interest rates to calculate the required monthly payment.
+            </p>
+        }
+        else if (selectedGoalType == GoalType.SaveAmount)
+        {
+            <h3 style="margin:0 0 1rem; font-size:1.05rem;">How much do you want to save, and in how long?</h3>
+            <div style="display:flex; gap:1.5rem; align-items:flex-end; flex-wrap:wrap;">
+                <div>
+                    <label class="ld-label">Target Amount ($)</label>
+                    <RadzenNumeric @bind-Value="targetSavingsAmount" Min="1" Format="N0" Style="width:160px;" />
+                </div>
+                <div>
+                    <label class="ld-label">Months to Save</label>
+                    <RadzenNumeric @bind-Value="monthsToSave" Min="1" Max="360" Style="width:120px;" />
+                </div>
+                <RadzenButton Text="Calculate" Click="Calculate" ButtonStyle="ButtonStyle.Primary" IsBusy="loading" />
+            </div>
+            <p style="margin:.75rem 0 0; font-size:.82rem; color:var(--ld-text-secondary);">
+                We'll compare the required monthly savings against your current income minus expenses and debt payments.
+            </p>
+        }
+        else
+        {
+            <h3 style="margin:0 0 1rem; font-size:1.05rem;">What is your monthly spending limit?</h3>
+            <div style="display:flex; gap:1.5rem; align-items:flex-end; flex-wrap:wrap;">
+                <div>
+                    <label class="ld-label">Monthly Cap ($)</label>
+                    <RadzenNumeric @bind-Value="monthlySpendingCap" Min="1" Format="N0" Style="width:160px;" />
+                </div>
+                <RadzenButton Text="Calculate" Click="Calculate" ButtonStyle="ButtonStyle.Primary" IsBusy="loading" />
+            </div>
+            <p style="margin:.75rem 0 0; font-size:.82rem; color:var(--ld-text-secondary);">
+                We'll compare this cap against your current month's planned expenses.
+            </p>
+        }
+    </div>
+
+    <!-- Error -->
+    @if (error is not null)
+    {
+        <div class="ld-card" style="margin-bottom:1.5rem; border-left:4px solid var(--ld-danger,#e53e3e); padding:1rem 1.25rem;">
+            <strong>Error:</strong> @error
+        </div>
+    }
+
+    <!-- Result -->
+    @if (result is not null)
+    {
+        <div class="ld-card" style="margin-bottom:1.5rem; border-left:4px solid @FeasibilityColor; padding:1rem 1.25rem;">
+            <div style="display:flex; align-items:center; gap:.75rem; margin-bottom:.75rem;">
+                <span style="font-size:1.5rem;">@FeasibilityIcon</span>
+                <span style="font-size:1.15rem; font-weight:700; color:@FeasibilityColor;">@FeasibilityLabel</span>
+            </div>
+            <p style="margin:0 0 .5rem; font-size:1rem;">@result.Summary</p>
+            @if (result.StatusDetail is not null)
+            {
+                <p style="margin:0; font-size:.9rem; color:var(--ld-text-secondary);">@result.StatusDetail</p>
+            }
+        </div>
+
+        @if (result.RequiredMonthly.HasValue || result.CurrentCapacity.HasValue || result.Shortfall.HasValue)
+        {
+            <div class="ld-summary-cards" style="margin-bottom:1.5rem;">
+                @if (result.RequiredMonthly.HasValue)
+                {
+                    <div class="ld-card ld-summary-card">
+                        <div class="ld-summary-label">@RequiredLabel</div>
+                        <div class="ld-summary-value">@result.RequiredMonthly.Value.ToString("C0")</div>
+                        <div class="ld-summary-sub">per month</div>
+                    </div>
+                }
+                @if (result.CurrentCapacity.HasValue)
+                {
+                    <div class="ld-card ld-summary-card">
+                        <div class="ld-summary-label">@CapacityLabel</div>
+                        <div class="ld-summary-value" style="color:@(result.CurrentCapacity.Value >= (result.RequiredMonthly ?? 0) ? "var(--ld-success,#38a169)" : "orange");">
+                            @result.CurrentCapacity.Value.ToString("C0")
+                        </div>
+                        <div class="ld-summary-sub">currently available</div>
+                    </div>
+                }
+                @if (result.Shortfall.HasValue && result.Shortfall.Value > 0)
+                {
+                    <div class="ld-card ld-summary-card">
+                        <div class="ld-summary-label">Shortfall</div>
+                        <div class="ld-summary-value" style="color:var(--ld-danger,#e53e3e);">
+                            @result.Shortfall.Value.ToString("C0")
+                        </div>
+                        <div class="ld-summary-sub">gap to close</div>
+                    </div>
+                }
+            </div>
+        }
+
+        @if (result.Recommendation is not null)
+        {
+            <div class="ld-card" style="border-left:4px solid #f0a070; padding:1rem 1.25rem;">
+                <div style="font-weight:600; margin-bottom:.25rem;">Recommendation</div>
+                <div style="font-size:.93rem;">@result.Recommendation</div>
+            </div>
+        }
+        else if (result.Feasibility == GoalFeasibility.OnTrack)
+        {
+            <div class="ld-card" style="border-left:4px solid var(--ld-success,#38a169); padding:1rem 1.25rem;">
+                <div style="color:var(--ld-success,#38a169); font-weight:600;">
+                    ✓ You're on track — no changes needed to hit this goal.
+                </div>
+            </div>
+        }
+    }
+    else if (!loading)
+    {
+        <div class="ld-card" style="text-align:center; padding:3rem; color:var(--ld-text-secondary);">
+            Select a goal type above and click <strong>Calculate</strong> to see your plan.
+        </div>
+    }
+</div>
+
+@code {
+    private GoalType selectedGoalType = GoalType.DebtFree;
+    private DateOnly? targetDate;
+    private decimal targetSavingsAmount = 10_000m;
+    private int monthsToSave = 12;
+    private decimal monthlySpendingCap = 2_500m;
+
+    private GoalPlanResultDto? result;
+    private bool loading;
+    private string? error;
+
+    // DatePicker proxy (RadzenDatePicker binds DateTime?)
+    private DateTime? targetDateProxy
+    {
+        get => targetDate.HasValue ? targetDate.Value.ToDateTime(TimeOnly.MinValue) : null;
+        set => targetDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : null;
+    }
+
+    private string FeasibilityColor => result?.Feasibility switch
+    {
+        GoalFeasibility.OnTrack    => "var(--ld-success,#38a169)",
+        GoalFeasibility.AtRisk     => "#f0a070",
+        GoalFeasibility.NotFeasible => "var(--ld-danger,#e53e3e)",
+        _ => "inherit"
+    };
+
+    private string FeasibilityIcon => result?.Feasibility switch
+    {
+        GoalFeasibility.OnTrack     => "✓",
+        GoalFeasibility.AtRisk      => "⚡",
+        GoalFeasibility.NotFeasible => "✗",
+        _ => ""
+    };
+
+    private string FeasibilityLabel => result?.Feasibility switch
+    {
+        GoalFeasibility.OnTrack     => "On Track",
+        GoalFeasibility.AtRisk      => "At Risk",
+        GoalFeasibility.NotFeasible => "Not Feasible",
+        _ => ""
+    };
+
+    private string RequiredLabel => selectedGoalType switch
+    {
+        GoalType.DebtFree   => "Required Payment",
+        GoalType.SaveAmount => "Required Savings",
+        GoalType.SpendingCap => "Spending Cap",
+        _ => "Required"
+    };
+
+    private string CapacityLabel => selectedGoalType switch
+    {
+        GoalType.DebtFree   => "Available for Extra Payments",
+        GoalType.SaveAmount => "Monthly Surplus",
+        GoalType.SpendingCap => "Current Spending",
+        _ => "Available"
+    };
+
+    private string GoalTypeClass(GoalType type) =>
+        type == selectedGoalType
+            ? "ld-goal-btn ld-goal-btn--active"
+            : "ld-goal-btn";
+
+    protected override void OnInitialized()
+    {
+        AuthTokenService.OnChange += OnTokenChanged;
+        // Default target date = 2 years from now
+        targetDate = DateOnly.FromDateTime(DateTime.Today.AddYears(2));
+    }
+
+    private async void OnTokenChanged() => await InvokeAsync(StateHasChanged);
+
+    public void Dispose() => AuthTokenService.OnChange -= OnTokenChanged;
+
+    private void SelectGoalType(GoalType type)
+    {
+        selectedGoalType = type;
+        result = null;
+        error = null;
+    }
+
+    private async Task Calculate()
+    {
+        loading = true;
+        error = null;
+        result = null;
+
+        try
+        {
+            var request = selectedGoalType switch
+            {
+                GoalType.DebtFree   => new GoalPlanRequest(GoalType.DebtFree, targetDate, null, null, null),
+                GoalType.SaveAmount => new GoalPlanRequest(GoalType.SaveAmount, null, targetSavingsAmount, monthsToSave, null),
+                GoalType.SpendingCap => new GoalPlanRequest(GoalType.SpendingCap, null, null, null, monthlySpendingCap),
+                _ => throw new InvalidOperationException()
+            };
+
+            result = await GoalApi.ComputeAsync(request);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

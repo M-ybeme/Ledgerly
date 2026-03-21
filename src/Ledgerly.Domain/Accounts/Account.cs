@@ -6,5 +6,6 @@ public sealed class Account
     public Guid UserId { get; set; }
     public string Name { get; set; } = "";
     public AccountType Type { get; set; }
+    public decimal Balance { get; set; }
     public DateTime CreatedUtc { get; set; }
 }

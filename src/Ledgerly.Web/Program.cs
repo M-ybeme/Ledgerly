@@ -83,6 +83,15 @@ builder.Services.AddHttpClient<DashboardApiClient>(client =>
 builder.Services.AddHttpClient<SavingsGoalsApiClient>(client =>
     client.BaseAddress = new Uri(apiBaseUrl));
 
+builder.Services.AddHttpClient<CashFlowApiClient>(client =>
+    client.BaseAddress = new Uri(apiBaseUrl));
+
+builder.Services.AddHttpClient<InsightsApiClient>(client =>
+    client.BaseAddress = new Uri(apiBaseUrl));
+
+builder.Services.AddHttpClient<GoalPlannerApiClient>(client =>
+    client.BaseAddress = new Uri(apiBaseUrl));
+
 var app = builder.Build();
 
 // Trust Railway's reverse proxy so Request.Scheme = "https" and

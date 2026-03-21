@@ -1,6 +1,6 @@
 # Ledgerly — Architecture-First Roadmap (v8)
 
-*Last Updated: Mar 19, 2026 — Phase 11 complete; recurring transactions, savings goals, Google OAuth, refresh tokens, rate limiting, health checks, and Serilog all live*
+*Last Updated: Mar 20, 2026 — Phase 12 complete (all 5 features); Cash Flow Forecast, Account Model, Net Worth Tracking, Insight Engine, and Goal Planner all live*
 
 ---
 
@@ -629,6 +629,110 @@ Outcome:
 ### Observability
 
 * [X] **Structured logging with Serilog** — `Serilog.AspNetCore` v8.0.3 + Console + File sinks; EF Database Command and ASP.NET noise filtered to Warning; rolling daily log files at `logs/ledgerly-.log` (7-day retention); `builder.Host.UseSerilog()` replaces default logger
+
+---
+
+## Phase 12 — Planning Intelligence & Account Reality (Planned)
+
+*Goal: Transform Ledgerly from a data tracker into a decision-making tool. Users stop asking "am I okay?" and start knowing.*
+
+---
+
+### Feature 1 — Cash Flow Forecast (Short-Term Survival) ✓ Complete
+
+**User story:** "Will I run out of money before my next paycheck?"
+
+* [X] New **Cash Flow** page at `/cash-flow` with 30 / 60 / 90 day range selector
+* [X] Daily balance line chart — starting balance ± income deposits ± planned expense deductions per day; labels thinned on 60/90-day views
+* [X] Upcoming Events table — shows only days with activity (income or expense); color-coded balance column
+* [X] Warning indicators: "Balance goes negative on April 23" / "Low balance (<$100) on April 19" (first occurrence only, deduplicated)
+* [X] Key output panel: Starting balance · Lowest balance (with date) · Days until negative · Ending balance
+* [X] "No risk detected" state when balance stays positive for the full window
+* [X] Optional daily burn rate — flat daily deduction applied on top of scheduled bills (simulates average daily spend)
+* [X] Data sources: manual starting balance + existing IncomeSources + PlannedExpenses (no bank sync)
+* [X] Income date logic: Weekly = every 7 days; Biweekly = every 14 days; SemiMonthly = 1st & 15th; Monthly = 1st of month
+* [X] Cash Flow nav link added to sidebar
+* [X] Demo seeder updated: next 2 months of recurring bills seeded unpaid so forecast has data immediately on demo login
+
+---
+
+### Feature 2 — Account Model (Manual, No Sync) ✓ Complete
+
+**User story:** "Where is my money actually sitting?"
+
+* [X] `Balance` field added to `Account` entity; `AddAccountBalance` migration
+* [X] Create / Edit forms include balance field; existing CRUD updated across all layers
+* [X] Accounts page shows balance column (red if negative); edit pre-fills current balance
+* [X] Transfer between accounts — `POST /accounts/transfer`; deducts from source, adds to destination; Accounts page shows transfer form when 2+ accounts exist
+* [X] Dashboard: **Total Cash** summary card (sum of non-credit account balances); **Account Balances** panel shows each account as a card with balance
+* [X] Cash Flow Forecast: account selector dropdown auto-fills starting balance from selected account's current balance; falls back to manual entry
+* [X] Demo seeder: Chase Checking seeded with $3,240; Marcus Savings with $8,750
+
+---
+
+### Feature 3 — Net Worth Tracking ✅ COMPLETE
+
+**User story:** "Am I actually getting wealthier?"
+
+* [X] Net worth calculation: Assets (account balances) − Liabilities (debt balances)
+* [X] Net Worth card on Dashboard: current net worth, total assets, total liabilities
+* [X] 12-month trend chart — area chart (Net Worth) + lines (Assets, Liabilities) on dashboard
+* [X] `NetWorthSnapshot` entity — UserId, Month (DateOnly), AssetsTotal, LiabilitiesTotal, NetWorth
+* [X] `INetWorthSnapshotRepository` / `EfNetWorthSnapshotRepository` — fetches last 12 months
+* [X] `NetWorthService.GetSummaryAsync()` — computes live current values + retrieves history
+* [X] `GET /dashboard/net-worth` endpoint returning `NetWorthSummaryDto`
+* [X] `DashboardApiClient.GetNetWorthSummaryAsync()` in Web layer
+* [X] Demo seeder: 12 months of historical snapshots showing steady improvement
+* [X] Migration: `AddNetWorthSnapshots`
+
+---
+
+### Feature 4 — Decision Recommendations (Rule-Based Insights) ✅ COMPLETE
+
+**User story:** "Tell me what I should do."
+
+* [X] Insight engine — deterministic, threshold-based rules; no LLM required
+* [X] **Debt insights**: highest APR warning, monthly minimums as % of income (Info/Warning/Danger thresholds)
+* [X] **Budget insights**: overdue bills (Danger), unpaid must-pay bills remaining (Warning), all-paid confirmation (Info)
+* [X] **Cash flow insights**: shortfall alert if unpaid bills exceed cash (Danger), low cash warning, months-covered summary
+* [X] Output style: short, blunt, actionable — emoji prefix (⚠/⚡/💡), color-coded by severity
+* [X] `InsightService` in Application layer — pure, takes DTOs, returns `InsightsDto` with three lists
+* [X] `GET /insights` endpoint — loads data in parallel, filters to current month, returns grouped insights
+* [X] `InsightsApiClient` in Web layer
+* [X] Insights panel on Dashboard — shows total count badge, color-coded cards (red/orange/blue)
+
+---
+
+### Feature 5 — Constraint-Based Scenario Planning (Goal Mode) ✅ COMPLETE
+
+**User story:** "Can I hit this goal — and what will it take?"
+
+* [X] Dedicated `/goals` page — "Goal Planner" with three goal types selectable via styled button toggle
+* [X] **Debt-Free by Date** — PMT formula from weighted-average debt APR, back-calculates required monthly payment, compares to available capacity
+* [X] **Save a Target Amount** — divides target by months, compares required savings rate to monthly surplus (income − expenses − debt minimums)
+* [X] **Spending Cap** — compares monthly cap against current planned expenses, calculates overage
+* [X] Feasibility indicator: On Track (green) / At Risk (orange) / Not Feasible (red) — with icon + color-coded border
+* [X] Summary sentence + status detail + recommendation on shortfall
+* [X] Three key number cards: Required / Current Capacity / Shortfall
+* [X] `GoalPlannerService` — pure calculation, no DB; PMT formula handles zero-interest edge case
+* [X] `POST /goal/plan` endpoint — loads debts, income, expenses; passes to service
+* [X] `GoalPlannerApiClient` in Web layer
+* [X] `ld-*` utility CSS classes added to `app.css` (also fixes CashFlow page styling)
+* [X] Goal Planner nav link added to sidebar
+
+---
+
+### Phase 12 Positioning
+
+With these five features Ledgerly becomes a **manual-input, privacy-first financial simulator with decision intelligence** — no bank integrations, no compliance overhead, but real planning, forecasting, and insight.
+
+| Feature | What It Adds |
+|---|---|
+| Cash Flow Forecast | Survival — know before it's a crisis |
+| Account Model | Reality — data reflects actual money |
+| Net Worth Tracking | Momentum — proof of long-term progress |
+| Decision Recommendations | Confidence — interpretation, not just data |
+| Constraint-Based Planning | Strategy — goal-driven, not reactive |
 
 ---
 

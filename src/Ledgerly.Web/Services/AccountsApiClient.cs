@@ -18,7 +18,7 @@ public sealed class AccountsApiClient
 
     public async Task<List<AccountDto>> GetAccountsAsync(CancellationToken ct = default)
         => await _http.GetFromJsonAsync<List<AccountDto>>("/accounts", ct)
-           ?? new List<AccountDto>();
+           ?? [];
 
     public async Task<AccountDto> CreateAccountAsync(CreateAccountRequest req, CancellationToken ct = default)
     {
@@ -30,6 +30,16 @@ public sealed class AccountsApiClient
     {
         var resp = await _http.PutAsJsonAsync($"/accounts/{id}", req, ct);
         return await ReadResultAsync<AccountDto>(resp, ct);
+    }
+
+    public async Task TransferAsync(TransferRequest req, CancellationToken ct = default)
+    {
+        var resp = await _http.PostAsJsonAsync("/accounts/transfer", req, ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var problem = await resp.Content.ReadFromJsonAsync<ProblemDetails>(cancellationToken: ct);
+            throw new InvalidOperationException(problem?.Detail ?? $"Request failed ({(int)resp.StatusCode}).");
+        }
     }
 
     public async Task DeleteAccountAsync(Guid id, CancellationToken ct = default)

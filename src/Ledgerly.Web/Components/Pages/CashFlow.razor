@@ -1,0 +1,287 @@
+@page "/cash-flow"
+@rendermode InteractiveServer
+@using Ledgerly.Contracts.CashFlow
+@using Ledgerly.Contracts.Accounts
+@using Ledgerly.Web.Services
+@using Ledgerly.Web.Auth
+@inject CashFlowApiClient CashFlowApi
+@inject AccountsApiClient AccountsApi
+@inject AuthTokenService AuthTokenService
+@implements IDisposable
+
+<PageTitle>Cash Flow Forecast — Ledgerly</PageTitle>
+
+<div class="ld-page">
+    <div class="ld-page-header">
+        <h1 class="ld-page-title">Cash Flow Forecast</h1>
+        <p class="ld-page-subtitle">See exactly when your balance gets tight over the next 30–90 days.</p>
+    </div>
+
+    <div class="ld-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; gap:1.5rem; align-items:flex-end; flex-wrap:wrap;">
+            @if (accounts.Count > 0)
+            {
+                <div>
+                    <label class="ld-label">Use Account Balance</label>
+                    <RadzenDropDown Data="@accounts" TextProperty="Name" ValueProperty="Id"
+                                    Value="@selectedAccountId" TValue="Guid?"
+                                    ValueChanged="@OnAccountSelected"
+                                    Placeholder="— pick account —"
+                                    Style="width:200px;" />
+                </div>
+            }
+            <div>
+                <label class="ld-label">Starting Balance ($)</label>
+                <RadzenNumeric @bind-Value="startingBalance" Style="width:160px;" Min="0" Format="F2" />
+            </div>
+            <div>
+                <label class="ld-label">Daily Burn Rate ($, optional)</label>
+                <RadzenNumeric @bind-Value="dailyBurnRate" Style="width:160px;" Min="0" Format="F2" />
+            </div>
+            <div>
+                <label class="ld-label">Forecast Period</label>
+                <RadzenSelectBar @bind-Value="days" TValue="int" Style="height:38px;">
+                    <Items>
+                        <RadzenSelectBarItem Text="30 days" Value="30" />
+                        <RadzenSelectBarItem Text="60 days" Value="60" />
+                        <RadzenSelectBarItem Text="90 days" Value="90" />
+                    </Items>
+                </RadzenSelectBar>
+            </div>
+            <RadzenButton Text="Run Forecast" Click="RunForecast" ButtonStyle="ButtonStyle.Primary" IsBusy="loading" />
+        </div>
+        <p style="margin:.75rem 0 0; font-size:.82rem; color:var(--ld-text-secondary);">
+            Income and bills are pulled from your existing Income Sources and Planned Expenses. No bank connection needed.
+            Daily burn rate applies a constant everyday spend on top of scheduled bills.
+        </p>
+    </div>
+
+    @if (error is not null)
+    {
+        <div class="ld-card" style="margin-bottom:1.5rem; border-left:4px solid var(--ld-danger,#e53e3e); padding:1rem 1.25rem;">
+            <strong>Error:</strong> @error
+        </div>
+    }
+
+    @if (forecast is not null)
+    {
+        @if (forecast.Warnings.Count > 0)
+        {
+            <div class="ld-card" style="margin-bottom:1.5rem; border-left:4px solid var(--ld-danger,#e53e3e); padding:1rem 1.25rem;">
+                <div style="font-weight:700; color:var(--ld-danger,#e53e3e); margin-bottom:.5rem;">⚠ Risk Detected</div>
+                @foreach (var w in forecast.Warnings)
+                {
+                    <div style="margin-bottom:.2rem; font-size:.93rem;">@w</div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="ld-card" style="margin-bottom:1.5rem; border-left:4px solid var(--ld-success,#38a169); padding:1rem 1.25rem;">
+                <span style="color:var(--ld-success,#38a169); font-weight:600;">
+                    ✓ No risk detected — your balance stays positive for the full @forecast.Days-day window.
+                </span>
+            </div>
+        }
+
+        <div class="ld-summary-cards" style="margin-bottom:1.5rem;">
+            <div class="ld-card ld-summary-card">
+                <div class="ld-summary-label">Starting Balance</div>
+                <div class="ld-summary-value">@forecast.StartingBalance.ToString("C")</div>
+            </div>
+            <div class="ld-card ld-summary-card">
+                <div class="ld-summary-label">Lowest Balance</div>
+                <div class="ld-summary-value" style="color:@BalanceColor(forecast.LowestBalance);">
+                    @forecast.LowestBalance.ToString("C")
+                </div>
+                <div class="ld-summary-sub">on @forecast.LowestBalanceDate.ToString("MMM d")</div>
+            </div>
+            <div class="ld-card ld-summary-card">
+                <div class="ld-summary-label">Days Until Negative</div>
+                <div class="ld-summary-value" style="color:@NegativeColor;">
+                    @(forecast.DaysUntilNegative.HasValue ? forecast.DaysUntilNegative.Value.ToString() : "Never")
+                </div>
+            </div>
+            <div class="ld-card ld-summary-card">
+                <div class="ld-summary-label">Ending Balance</div>
+                <div class="ld-summary-value" style="color:@BalanceColor(EndingBalance);">
+                    @EndingBalance.ToString("C")
+                </div>
+                <div class="ld-summary-sub">after @forecast.Days days</div>
+            </div>
+        </div>
+
+        <div class="ld-card" style="margin-bottom:1.5rem;">
+            <h3 style="margin:0 0 1rem;">Daily Balance Projection</h3>
+            <RadzenChart Style="height:300px;">
+                <RadzenLineSeries Data="@chartPoints" CategoryProperty="Label" ValueProperty="Balance"
+                                  Title="Balance" Smooth="true" />
+                <RadzenCategoryAxis>
+                    <RadzenGridLines Visible="true" />
+                </RadzenCategoryAxis>
+                <RadzenValueAxis Formatter="@(v => ((decimal)(double)v).ToString("C0"))">
+                    <RadzenGridLines Visible="true" />
+                    <RadzenAxisTitle Text="Balance ($)" />
+                </RadzenValueAxis>
+                <RadzenLegend Visible="false" />
+            </RadzenChart>
+        </div>
+
+        @if (EventDays.Count > 0)
+        {
+            <div class="ld-card">
+                <h3 style="margin:0 0 1rem;">Upcoming Events</h3>
+                <RadzenDataGrid Data="@EventDays" TItem="CashFlowDayDto" AllowPaging="true" PageSize="15" AllowSorting="true">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="CashFlowDayDto" Property="Date" Title="Date" Width="130px" SortOrder="SortOrder.Ascending">
+                            <Template Context="d">@d.Date.ToString("MMM d, yyyy")</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="CashFlowDayDto" Title="Income">
+                            <Template Context="d">
+                                @if (d.IncomeEvents.Count > 0)
+                                {
+                                    <span style="color:var(--ld-success,#38a169);">
+                                        +@d.IncomeTotal.ToString("C") &mdash; @string.Join(", ", d.IncomeEvents)
+                                    </span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="CashFlowDayDto" Title="Expenses">
+                            <Template Context="d">
+                                @if (d.ExpenseEvents.Count > 0)
+                                {
+                                    <span style="color:var(--ld-danger,#e53e3e);">
+                                        -@d.ExpenseTotal.ToString("C") &mdash; @string.Join(", ", d.ExpenseEvents)
+                                    </span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="CashFlowDayDto" Property="ClosingBalance" Title="Balance After" Width="140px">
+                            <Template Context="d">
+                                <span style="font-weight:600; color:@BalanceColor(d.ClosingBalance);">
+                                    @d.ClosingBalance.ToString("C")
+                                </span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            </div>
+        }
+        else
+        {
+            <div class="ld-card" style="text-align:center; padding:2rem; color:var(--ld-text-secondary);">
+                No income or expense events in this window.
+            </div>
+        }
+    }
+    else if (!loading)
+    {
+        <div class="ld-card" style="text-align:center; padding:3rem; color:var(--ld-text-secondary);">
+            Enter your current balance and click <strong>Run Forecast</strong> to see your projected cash flow.
+        </div>
+    }
+</div>
+
+@code {
+    private List<AccountDto> accounts = [];
+    private Guid? selectedAccountId;
+    private decimal startingBalance;
+    private decimal dailyBurnRate;
+    private int days = 30;
+    private CashFlowForecastDto? forecast;
+    private List<ChartPoint> chartPoints = [];
+    private bool loading;
+    private string? error;
+
+    private sealed record ChartPoint(string Label, decimal Balance);
+
+    private List<CashFlowDayDto> EventDays =>
+        forecast?.DailySnapshots
+            .Where(d => d.IncomeEvents.Count > 0 || d.ExpenseEvents.Count > 0)
+            .ToList() ?? [];
+
+    private decimal EndingBalance => forecast?.DailySnapshots.LastOrDefault()?.ClosingBalance ?? 0;
+
+    private string NegativeColor => forecast?.DaysUntilNegative.HasValue == true
+        ? "var(--ld-danger,#e53e3e)"
+        : "var(--ld-success,#38a169)";
+
+    private static string BalanceColor(decimal balance) =>
+        balance < 0 ? "var(--ld-danger,#e53e3e)" : balance < 100 ? "orange" : "inherit";
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthTokenService.OnChange += OnTokenChanged;
+        if (AuthTokenService.IsInitialized)
+            await LoadAccountsAsync();
+    }
+
+    private async void OnTokenChanged()
+    {
+        if (AuthTokenService.IsInitialized && accounts.Count == 0)
+            await LoadAccountsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadAccountsAsync()
+    {
+        try
+        {
+            accounts = await AccountsApi.GetAccountsAsync();
+            // Auto-select the first non-credit account and fill the balance
+            var first = accounts.FirstOrDefault(a => a.Type != Domain.Accounts.AccountType.CreditCard);
+            if (first is not null)
+            {
+                selectedAccountId = first.Id;
+                startingBalance = first.Balance;
+            }
+        }
+        catch { /* silently ignore — user can still type manually */ }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnAccountSelected(Guid? id)
+    {
+        selectedAccountId = id;
+        if (id.HasValue)
+        {
+            var acct = accounts.FirstOrDefault(a => a.Id == id.Value);
+            if (acct is not null)
+                startingBalance = acct.Balance;
+        }
+    }
+
+
+    public void Dispose() => AuthTokenService.OnChange -= OnTokenChanged;
+
+    private async Task RunForecast()
+    {
+        loading = true;
+        error = null;
+        forecast = null;
+        chartPoints = [];
+        try
+        {
+            forecast = await CashFlowApi.GetForecastAsync(
+                startingBalance,
+                days,
+                dailyBurnRate > 0 ? dailyBurnRate : null);
+
+            // Show only every Nth label to prevent x-axis crowding
+            var interval = days == 90 ? 10 : days == 60 ? 7 : 5;
+            chartPoints = forecast.DailySnapshots
+                .Select((d, i) => new ChartPoint(
+                    i % interval == 0 ? d.Date.ToString("MMM d") : "",
+                    d.ClosingBalance))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

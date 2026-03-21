@@ -392,3 +392,113 @@ a:hover {
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
 }
+
+/* ============================================================
+   ld-* Page Layout Utilities (used by CashFlow, Goals, etc.)
+   ============================================================ */
+
+.ld-page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 .25rem;
+}
+
+.ld-page-header {
+    margin-bottom: 1.5rem;
+}
+
+.ld-page-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--ld-text-primary);
+    margin: 0 0 .25rem;
+}
+
+.ld-page-subtitle {
+    font-size: .92rem;
+    color: var(--ld-text-secondary);
+    margin: 0;
+}
+
+.ld-card {
+    background: var(--ld-bg-card);
+    border: 1px solid var(--ld-border-color);
+    border-radius: 10px;
+    box-shadow: var(--ld-shadow);
+    padding: 1.25rem 1.5rem;
+    transition: background-color .2s ease;
+}
+
+.ld-label {
+    display: block;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ld-text-secondary);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin-bottom: .35rem;
+}
+
+.ld-summary-cards {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.ld-summary-card {
+    flex: 1;
+    min-width: 140px;
+}
+
+.ld-summary-label {
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--ld-text-secondary);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    margin-bottom: .3rem;
+}
+
+.ld-summary-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--ld-text-primary);
+    line-height: 1.2;
+}
+
+.ld-summary-sub {
+    font-size: .78rem;
+    color: var(--ld-text-secondary);
+    margin-top: .2rem;
+}
+
+/* Goal type selector buttons */
+.ld-goal-btn {
+    padding: .55rem 1.1rem;
+    border-radius: 8px;
+    border: 2px solid var(--ld-border-color);
+    background: var(--ld-bg-surface);
+    color: var(--ld-text-primary);
+    font-size: .9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
+}
+
+.ld-goal-btn:hover {
+    border-color: var(--ld-primary);
+    background: var(--ld-bg-card);
+}
+
+.ld-goal-btn--active {
+    border-color: var(--ld-primary);
+    background: var(--ld-primary);
+    color: var(--ld-tertiary);
+    font-weight: 700;
+}
+
+.ld-goal-btn--active:hover {
+    background: var(--ld-primary-dark);
+    border-color: var(--ld-primary-dark);
+    color: var(--ld-tertiary);
+}

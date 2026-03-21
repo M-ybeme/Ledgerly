@@ -20,6 +20,10 @@
             <RadzenLabel Text="Type" />
             <RadzenDropDown @bind-Value="formType" Data="@accountTypes" Style="display:block; width:160px;" />
         </div>
+        <div>
+            <RadzenLabel Text="Current Balance ($)" />
+            <RadzenNumeric @bind-Value="formBalance" TValue="decimal" Min="0" Format="F2" Style="display:block; width:150px;" />
+        </div>
         <RadzenButton Text="@(editingId.HasValue ? "Update" : "Create")" Icon="@(editingId.HasValue ? "save" : "add")" ButtonStyle="ButtonStyle.Primary" Click="@Save" />
         @if (editingId.HasValue)
         {
@@ -38,11 +42,18 @@ else if (accounts.Count == 0)
 }
 else
 {
-    <RadzenDataGrid Data="@accounts" TItem="AccountDto" AllowSorting="true" AllowColumnResize="true">
+    <RadzenDataGrid Data="@accounts" TItem="AccountDto" AllowSorting="true" AllowColumnResize="true" class="rz-mb-4">
         <Columns>
             <RadzenDataGridColumn TItem="AccountDto" Property="Name" Title="Name" />
-            <RadzenDataGridColumn TItem="AccountDto" Property="Type" Title="Type" />
-            <RadzenDataGridColumn TItem="AccountDto" Title="Created">
+            <RadzenDataGridColumn TItem="AccountDto" Property="Type" Title="Type" Width="130px" />
+            <RadzenDataGridColumn TItem="AccountDto" Property="Balance" Title="Balance" Width="140px">
+                <Template Context="a">
+                    <span style="font-weight:600; color:@(a.Balance < 0 ? "#e05c5c" : "inherit");">
+                        @a.Balance.ToString("C2")
+                    </span>
+                </Template>
+            </RadzenDataGridColumn>
+            <RadzenDataGridColumn TItem="AccountDto" Title="Created" Width="120px">
                 <Template Context="a">@a.CreatedUtc.ToString("yyyy-MM-dd")</Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn TItem="AccountDto" Title="Actions" Sortable="false" Width="120px">
@@ -53,14 +64,45 @@ else
             </RadzenDataGridColumn>
         </Columns>
     </RadzenDataGrid>
+
+    @if (accounts.Count >= 2)
+    {
+        <RadzenCard>
+            <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Transfer Between Accounts</RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
+                <div>
+                    <RadzenLabel Text="From" />
+                    <RadzenDropDown @bind-Value="transferFromId" Data="@accounts"
+                                    TextProperty="Name" ValueProperty="Id"
+                                    Style="display:block; width:200px;" />
+                </div>
+                <div>
+                    <RadzenLabel Text="To" />
+                    <RadzenDropDown @bind-Value="transferToId" Data="@accounts"
+                                    TextProperty="Name" ValueProperty="Id"
+                                    Style="display:block; width:200px;" />
+                </div>
+                <div>
+                    <RadzenLabel Text="Amount ($)" />
+                    <RadzenNumeric @bind-Value="transferAmount" TValue="decimal" Min="0.01m" Format="F2" Style="display:block; width:130px;" />
+                </div>
+                <RadzenButton Text="Transfer" Icon="swap_horiz" ButtonStyle="ButtonStyle.Secondary" Click="@DoTransfer" />
+            </RadzenStack>
+        </RadzenCard>
+    }
 }
 
 @code {
     private List<AccountDto>? accounts;
     private string formName = "";
     private AccountType formType = AccountType.Checking;
+    private decimal formBalance;
     private Guid? editingId;
     private IEnumerable<AccountType> accountTypes = Enum.GetValues<AccountType>();
+
+    private Guid transferFromId;
+    private Guid transferToId;
+    private decimal transferAmount;
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -69,6 +111,11 @@ else
         try
         {
             accounts = await Api.GetAccountsAsync();
+            if (accounts.Count >= 2)
+            {
+                transferFromId = accounts[0].Id;
+                transferToId = accounts[1].Id;
+            }
         }
         catch (Exception ex)
         {
@@ -83,14 +130,15 @@ else
         {
             if (editingId.HasValue)
             {
-                var updated = await Api.UpdateAccountAsync(editingId.Value, new UpdateAccountRequest(formName, formType));
+                var updated = await Api.UpdateAccountAsync(editingId.Value, new UpdateAccountRequest(formName, formType, formBalance));
                 NotificationService.Notify(NotificationSeverity.Success, "Updated", $"\"{updated.Name}\" saved.");
                 CancelEdit();
             }
             else
             {
-                var created = await Api.CreateAccountAsync(new CreateAccountRequest(formName, formType));
+                var created = await Api.CreateAccountAsync(new CreateAccountRequest(formName, formType, formBalance));
                 formName = "";
+                formBalance = 0;
                 NotificationService.Notify(NotificationSeverity.Success, "Created", $"Account \"{created.Name}\" added.");
             }
             await LoadAsync();
@@ -106,6 +154,7 @@ else
         editingId = a.Id;
         formName = a.Name;
         formType = a.Type;
+        formBalance = a.Balance;
     }
 
     private void CancelEdit()
@@ -113,6 +162,25 @@ else
         editingId = null;
         formName = "";
         formType = AccountType.Checking;
+        formBalance = 0;
+    }
+
+    private async Task DoTransfer()
+    {
+        try
+        {
+            await Api.TransferAsync(new TransferRequest(transferFromId, transferToId, transferAmount));
+            var fromName = accounts?.FirstOrDefault(a => a.Id == transferFromId)?.Name ?? "source";
+            var toName = accounts?.FirstOrDefault(a => a.Id == transferToId)?.Name ?? "destination";
+            NotificationService.Notify(NotificationSeverity.Success, "Transfer complete",
+                $"{transferAmount.ToString("C2")} moved from {fromName} to {toName}.");
+            transferAmount = 0;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Transfer failed", ex.Message);
+        }
     }
 
     private async Task Delete(Guid id)

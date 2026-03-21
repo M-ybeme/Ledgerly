@@ -6,6 +6,11 @@
 @using Ledgerly.Domain.Budget
 @using Ledgerly.Web.Components.Pages
 @using Ledgerly.Contracts.Dashboard
+@using Ledgerly.Contracts.Accounts
+@using Ledgerly.Contracts.NetWorth
+@using Ledgerly.Contracts.Insights
+@inject Ledgerly.Web.Services.AccountsApiClient AccountsApi
+@inject Ledgerly.Web.Services.InsightsApiClient InsightsApi
 @inject Ledgerly.Web.Services.TransactionsApiClient TransactionsApi
 @inject Ledgerly.Web.Services.DebtAccountsApiClient DebtsApi
 @inject Ledgerly.Web.Services.IncomeSourcesApiClient IncomeSourcesApi
@@ -43,6 +48,24 @@ else
             <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">@DateTime.Today.ToString("MMMM yyyy")</RadzenText>
         </RadzenCard>
         <RadzenCard Style="flex:1; min-width:180px;">
+            <RadzenText TextStyle="TextStyle.Overline" style="color:var(--rz-text-secondary-color); letter-spacing:.08em;">TOTAL CASH</RadzenText>
+            <RadzenText TextStyle="TextStyle.H5" style="color:#5b8dd9; margin-top:.25rem;">@totalCash.ToString("C0")</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">@accounts.Count account@(accounts.Count == 1 ? "" : "s")</RadzenText>
+        </RadzenCard>
+        <RadzenCard Style="flex:1; min-width:180px;">
+            <RadzenText TextStyle="TextStyle.Overline" style="color:var(--rz-text-secondary-color); letter-spacing:.08em;">NET WORTH</RadzenText>
+            @if (netWorthSummary is not null)
+            {
+                <RadzenText TextStyle="TextStyle.H5" style="@($"color:{(netWorthSummary.CurrentNetWorth >= 0 ? "#6aab3e" : "#e05c5c")}; margin-top:.25rem;")">@netWorthSummary.CurrentNetWorth.ToString("C0")</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">assets @netWorthSummary.CurrentAssets.ToString("C0") · debt @netWorthSummary.CurrentLiabilities.ToString("C0")</RadzenText>
+            }
+            else
+            {
+                <RadzenText TextStyle="TextStyle.H5" style="color:var(--rz-text-secondary-color); margin-top:.25rem;">—</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">add accounts &amp; debts</RadzenText>
+            }
+        </RadzenCard>
+        <RadzenCard Style="flex:1; min-width:180px;">
             <RadzenText TextStyle="TextStyle.Overline" style="color:var(--rz-text-secondary-color); letter-spacing:.08em;">PLANNED EXPENSES</RadzenText>
             @{ var unpaidThisMonth = currentMonthExpenses.Count(e => !e.IsPaid);
                var overdueCount = currentMonthExpenses.Count(e => !e.IsPaid && e.DueDate < today); }
@@ -57,6 +80,35 @@ else
             }
         </RadzenCard>
     </RadzenStack>
+
+    <!-- Insights Panel -->
+    @if (insights is not null && (insights.Debt.Count + insights.Budget.Count + insights.CashFlow.Count) > 0)
+    {
+        <RadzenCard class="rz-mb-6">
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".5rem" class="rz-mb-3">
+                <RadzenText TextStyle="TextStyle.H6" style="margin:0;">Insights</RadzenText>
+                <RadzenBadge BadgeStyle="BadgeStyle.Secondary" Text="@((insights.Debt.Count + insights.Budget.Count + insights.CashFlow.Count).ToString())" />
+            </RadzenStack>
+            <RadzenStack Gap=".5rem">
+                @foreach (var insight in insights.Debt.Concat(insights.Budget).Concat(insights.CashFlow))
+                {
+                    var style = insight.Severity switch
+                    {
+                        InsightSeverity.Danger  => "background:rgba(224,92,92,0.12); border-left:3px solid #e05c5c; padding:.6rem .9rem; border-radius:4px; font-size:.9rem;",
+                        InsightSeverity.Warning => "background:rgba(240,160,112,0.12); border-left:3px solid #f0a070; padding:.6rem .9rem; border-radius:4px; font-size:.9rem;",
+                        _                       => "background:rgba(91,141,217,0.10); border-left:3px solid #5b8dd9; padding:.6rem .9rem; border-radius:4px; font-size:.9rem;",
+                    };
+                    var icon = insight.Severity switch
+                    {
+                        InsightSeverity.Danger  => "⚠",
+                        InsightSeverity.Warning => "⚡",
+                        _                       => "💡",
+                    };
+                    <div style="@style">@icon @insight.Message</div>
+                }
+            </RadzenStack>
+        </RadzenCard>
+    }
 
     <!-- Chart Section -->
     <RadzenCard class="rz-mb-6">
@@ -298,6 +350,51 @@ else
         </RadzenCard>
     }
 
+    <!-- Account Balances -->
+    @if (accounts.Count > 0)
+    {
+        <RadzenCard class="rz-mb-6">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-mb-3">Account Balances</RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Wrap="FlexWrap.Wrap">
+                @foreach (var acct in accounts)
+                {
+                    <RadzenCard Variant="Variant.Outlined" Style="flex:1; min-width:160px;">
+                        <RadzenText TextStyle="TextStyle.Caption" style="color:var(--rz-text-secondary-color);">@acct.Type</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Subtitle1" style="font-weight:700;">@acct.Name</RadzenText>
+                        <div style="@($"color:{(acct.Balance < 0 ? "#e05c5c" : "#5b8dd9")}; margin-top:.25rem; font-size:1.15rem; font-weight:700;")">
+                            @acct.Balance.ToString("C2")
+                        </div>
+                    </RadzenCard>
+                }
+            </RadzenStack>
+        </RadzenCard>
+    }
+
+    <!-- Net Worth Trend -->
+    @if (netWorthSummary is not null && netWorthSummary.History.Count > 0)
+    {
+        <RadzenCard class="rz-mb-6">
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" class="rz-mb-3">
+                <RadzenText TextStyle="TextStyle.H6">Net Worth Trend (12 Months)</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2" style="color:var(--rz-text-secondary-color);">
+                    Current: <strong style="@($"color:{(netWorthSummary.CurrentNetWorth >= 0 ? "#6aab3e" : "#e05c5c")};")">@netWorthSummary.CurrentNetWorth.ToString("C0")</strong>
+                </RadzenText>
+            </RadzenStack>
+            <RadzenChart Style="height:220px; width:100%;">
+                <RadzenAreaSeries Data="@netWorthSummary.History" CategoryProperty="Month" ValueProperty="NetWorth"
+                                  Title="Net Worth" Fill="#5b8dd940" Stroke="#5b8dd9" StrokeWidth="2" />
+                <RadzenLineSeries Data="@netWorthSummary.History" CategoryProperty="Month" ValueProperty="AssetsTotal"
+                                  Title="Assets" Stroke="#6aab3e" StrokeWidth="1.5" />
+                <RadzenLineSeries Data="@netWorthSummary.History" CategoryProperty="Month" ValueProperty="LiabilitiesTotal"
+                                  Title="Liabilities" Stroke="#e05c5c" StrokeWidth="1.5" />
+                <RadzenCategoryAxis FormatString="{0:MMM yy}"><RadzenGridLines Visible="false" /></RadzenCategoryAxis>
+                <RadzenValueAxis Formatter="@FormatCurrency"><RadzenGridLines Visible="true" /></RadzenValueAxis>
+                <RadzenLegend Visible="true" />
+                <RadzenChartTooltipOptions Shared="false" />
+            </RadzenChart>
+        </RadzenCard>
+    }
+
     <!-- Debt Balances -->
     @if (debts.Count > 0)
     {
@@ -358,6 +455,9 @@ else
 
     // Data
     private FinancialSummaryDto? financialSummary;
+    private NetWorthSummaryDto? netWorthSummary;
+    private InsightsDto? insights;
+    private List<AccountDto> accounts = [];
     private List<DebtAccountDto> debts = [];
     private List<MonthlyFlow> monthlyFlow = [];
     private List<MonthComparison> currentMonthComparison = [];
@@ -367,6 +467,7 @@ else
     private List<PlannedExpenseDto> currentMonthExpenses = [];
 
     // Summary
+    private decimal totalCash;
     private decimal totalDebt;
     private decimal expectedMonthlyIncome;
     private decimal monthIncome;
@@ -408,13 +509,20 @@ else
             var incomeTask = IncomeSourcesApi.GetAllAsync();
             var plannedTask = PlannedExpensesApi.GetAllAsync();
             var summaryTask = DashboardApi.GetFinancialSummaryAsync();
-            await Task.WhenAll(transactionsTask, debtsTask, incomeTask, plannedTask, summaryTask);
+            var accountsTask = AccountsApi.GetAccountsAsync();
+            var netWorthTask = DashboardApi.GetNetWorthSummaryAsync();
+            var insightsTask = InsightsApi.GetInsightsAsync();
+            await Task.WhenAll(transactionsTask, debtsTask, incomeTask, plannedTask, summaryTask, accountsTask, netWorthTask, insightsTask);
 
             var transactions = transactionsTask.Result;
             debts = debtsTask.Result;
             incomeSources = incomeTask.Result;
             plannedExpenses = plannedTask.Result;
             financialSummary = summaryTask.Result;
+            accounts = accountsTask.Result;
+            totalCash = accounts.Where(a => a.Type != Domain.Accounts.AccountType.CreditCard).Sum(a => a.Balance);
+            netWorthSummary = netWorthTask.Result;
+            insights = insightsTask.Result;
 
             totalDebt = debts.Sum(d => d.Balance);
             expectedMonthlyIncome = incomeSources.Sum(s => s.MonthlyAmount);

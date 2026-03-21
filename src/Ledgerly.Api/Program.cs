@@ -8,7 +8,11 @@ using Ledgerly.Application.Accounts;
 using Ledgerly.Application.Auth;
 using Ledgerly.Application.Budget;
 using Ledgerly.Application.Credit;
+using Ledgerly.Application.CashFlow;
 using Ledgerly.Application.Dashboard;
+using Ledgerly.Application.Goals;
+using Ledgerly.Application.Insights;
+using Ledgerly.Application.NetWorth;
 using Ledgerly.Application.Debts;
 using Ledgerly.Application.Income;
 using Ledgerly.Application.Scenarios;
@@ -75,6 +79,10 @@ builder.Services.AddScoped<PlannedExpenseService>();
 builder.Services.AddScoped<MonthlyBudgetService>();
 builder.Services.AddScoped<FinancialSummaryService>();
 builder.Services.AddScoped<SavingsGoalService>();
+builder.Services.AddScoped<CashFlowForecastService>();
+builder.Services.AddScoped<NetWorthService>();
+builder.Services.AddScoped<InsightService>();
+builder.Services.AddScoped<GoalPlannerService>();
 builder.Services.AddHostedService<OverdueExpenseNotifier>();
 
 // Auth services

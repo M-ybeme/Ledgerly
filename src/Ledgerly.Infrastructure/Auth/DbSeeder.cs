@@ -3,6 +3,7 @@ using Ledgerly.Domain.Budget;
 using Ledgerly.Domain.Credit;
 using Ledgerly.Domain.Debts;
 using Ledgerly.Domain.Income;
+using Ledgerly.Domain.NetWorth;
 using Ledgerly.Domain.Scenarios;
 using Ledgerly.Infrastructure.Data;
 using Microsoft.AspNetCore.Identity;
@@ -20,12 +21,36 @@ public static class DbSeeder
         await using var scope = services.CreateAsyncScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-        // If user already exists the data was already seeded — just ensure 2FA stays off.
+        // If user already exists the data was already seeded — just ensure 2FA stays off
+        // and back-fill any new data that wasn't present when the user was first created.
         var existingDemo = await userManager.FindByEmailAsync(DemoEmail);
         if (existingDemo is not null)
         {
             if (await userManager.GetTwoFactorEnabledAsync(existingDemo))
                 await userManager.SetTwoFactorEnabledAsync(existingDemo, false);
+
+            // Back-fill net worth snapshots if the table was added after initial seed
+            var db2 = scope.ServiceProvider.GetRequiredService<LedgerlyDbContext>();
+            var uid2 = existingDemo.Id;
+            if (!db2.NetWorthSnapshots.Any(s => s.UserId == uid2))
+            {
+                var thisMonth2 = DateOnly.FromDateTime(DateTime.Today).AddDays(1 - DateOnly.FromDateTime(DateTime.Today).Day);
+                for (int i = 12; i >= 1; i--)
+                {
+                    var assets2      = 8_000m + (12 - i) * 340m;
+                    var liabilities2 = 43_500m - (12 - i) * 220m;
+                    db2.NetWorthSnapshots.Add(new NetWorthSnapshot
+                    {
+                        Id = Guid.NewGuid(), UserId = uid2,
+                        Month = thisMonth2.AddMonths(-i),
+                        AssetsTotal = assets2,
+                        LiabilitiesTotal = liabilities2,
+                        NetWorth = assets2 - liabilities2,
+                    });
+                }
+                await db2.SaveChangesAsync();
+            }
+
             return;
         }
 
@@ -49,8 +74,8 @@ public static class DbSeeder
         var thisMonth  = new DateOnly(today.Year, today.Month, 1);
 
         // ── 1. ACCOUNTS ──────────────────────────────────────────────────────
-        var checkingAcct = new Account { Id = Guid.NewGuid(), UserId = uid, Name = "Chase Checking",   Type = AccountType.Checking };
-        var savingsAcct  = new Account { Id = Guid.NewGuid(), UserId = uid, Name = "Marcus Savings",   Type = AccountType.Savings  };
+        var checkingAcct = new Account { Id = Guid.NewGuid(), UserId = uid, Name = "Chase Checking", Type = AccountType.Checking, Balance = 3_240m };
+        var savingsAcct  = new Account { Id = Guid.NewGuid(), UserId = uid, Name = "Marcus Savings",  Type = AccountType.Savings,  Balance = 8_750m };
         db.Accounts.AddRange(checkingAcct, savingsAcct);
 
         // ── 2. INCOME SOURCES ─────────────────────────────────────────────────
@@ -168,26 +193,57 @@ public static class DbSeeder
         db.CreditProfiles.Add(creditProfile);
 
         // ── 7. PLANNED EXPENSES (recurring monthly bills) ────────────────────
-        // These are always due in the current month with relative dates.
-        // Bills whose due day has passed are marked paid; future ones are upcoming.
-        var plannedExpenses = new List<PlannedExpense>
+        // Current month: past due dates are auto-marked paid; future ones are upcoming.
+        // Next 2 months: all recurring bills seeded unpaid so Cash Flow Forecast has data.
+        var recurringBills = new (string Desc, decimal Amt, int Day, Guid? CatId, ExpensePriority Pri)[]
         {
-            PE(uid, "Rent",                1_350m,  1, catRent.Id,      isRecurring: true,  priority: ExpensePriority.MustPay,   today),
-            PE(uid, "Car Payment",           320m,  5, catDebt.Id,      isRecurring: true,  priority: ExpensePriority.MustPay,   today),
-            PE(uid, "Netflix",                18m,  8, catSubs.Id,      isRecurring: true,  priority: ExpensePriority.WantToPay, today),
-            PE(uid, "Spotify",                12m,  8, catSubs.Id,      isRecurring: true,  priority: ExpensePriority.WantToPay, today),
-            PE(uid, "Student Loan",          275m, 10, catDebt.Id,      isRecurring: true,  priority: ExpensePriority.MustPay,   today),
-            PE(uid, "Electricity",            88m, 14, catUtilities.Id, isRecurring: true,  priority: ExpensePriority.MustPay,   today),
-            PE(uid, "Internet",               72m, 18, catUtilities.Id, isRecurring: true,  priority: ExpensePriority.MustPay,   today),
-            PE(uid, "Phone Bill",             90m, 20, catUtilities.Id, isRecurring: true,  priority: ExpensePriority.MustPay,   today),
-            PE(uid, "Gym Membership",         40m, 22, catHealth.Id,    isRecurring: true,  priority: ExpensePriority.WantToPay, today),
-            PE(uid, "Groceries (monthly)",   380m, 27, catGrocery.Id,   isRecurring: true,  priority: ExpensePriority.MustPay,   today),
-            // Non-recurring one-time expense this month
-            PE(uid, "Car Registration",      195m, 20, catTransport.Id, isRecurring: false, priority: ExpensePriority.MustPay,   today),
+            ("Rent",               1_350m,  1, catRent.Id,      ExpensePriority.MustPay),
+            ("Car Payment",          320m,  5, catDebt.Id,      ExpensePriority.MustPay),
+            ("Netflix",               18m,  8, catSubs.Id,      ExpensePriority.WantToPay),
+            ("Spotify",               12m,  8, catSubs.Id,      ExpensePriority.WantToPay),
+            ("Student Loan",         275m, 10, catDebt.Id,      ExpensePriority.MustPay),
+            ("Electricity",           88m, 14, catUtilities.Id, ExpensePriority.MustPay),
+            ("Internet",              72m, 18, catUtilities.Id, ExpensePriority.MustPay),
+            ("Phone Bill",            90m, 20, catUtilities.Id, ExpensePriority.MustPay),
+            ("Gym Membership",        40m, 22, catHealth.Id,    ExpensePriority.WantToPay),
+            ("Groceries (monthly)",  380m, 27, catGrocery.Id,   ExpensePriority.MustPay),
         };
-        db.PlannedExpenses.AddRange(plannedExpenses);
 
-        // ── 8. BUDGET PLANS + TRANSACTIONS (6 months) ────────────────────────
+        // Current month (past ones auto-paid)
+        foreach (var b in recurringBills)
+            db.PlannedExpenses.Add(PE(uid, b.Desc, b.Amt, b.Day, b.CatId, isRecurring: true, b.Pri, thisMonth, today));
+
+        // One-time this month
+        db.PlannedExpenses.Add(PE(uid, "Car Registration", 195m, 20, catTransport.Id, isRecurring: false, ExpensePriority.MustPay, thisMonth, today));
+
+        // Next 2 months — all unpaid, gives Cash Flow Forecast real data to project
+        for (int m = 1; m <= 2; m++)
+        {
+            var futureMonth = thisMonth.AddMonths(m);
+            foreach (var b in recurringBills)
+                db.PlannedExpenses.Add(PE(uid, b.Desc, b.Amt, b.Day, b.CatId, isRecurring: true, b.Pri, futureMonth, today));
+        }
+
+        // ── 8. NET WORTH SNAPSHOTS (12 months of history) ────────────────────
+        // Shows gradual improvement: reducing debt, growing savings
+        // Today: assets ~$11,990, liabilities ~$40,850, NW ~-$28,860
+        for (int i = 12; i >= 1; i--)
+        {
+            var snapshotMonth = thisMonth.AddMonths(-i);
+            // Assets grow ~$340/month; liabilities shrink ~$220/month
+            var assets      = 8_000m + (12 - i) * 340m;
+            var liabilities = 43_500m - (12 - i) * 220m;
+            db.NetWorthSnapshots.Add(new NetWorthSnapshot
+            {
+                Id = Guid.NewGuid(), UserId = uid,
+                Month = snapshotMonth,
+                AssetsTotal = assets,
+                LiabilitiesTotal = liabilities,
+                NetWorth = assets - liabilities,
+            });
+        }
+
+        // ── 9. BUDGET PLANS + TRANSACTIONS (6 months) ────────────────────────
         for (int i = 5; i >= 0; i--)
         {
             var mStart = thisMonth.AddMonths(-i);
@@ -298,14 +354,15 @@ public static class DbSeeder
         });
 
     /// <summary>
-    /// Creates a planned expense for the current month.
-    /// Bills whose due day is strictly before today are marked as paid automatically.
+    /// Creates a planned expense for the given month.
+    /// Bills whose due date is strictly before today are marked as paid automatically.
     /// </summary>
     private static PlannedExpense PE(
         Guid uid, string desc, decimal amount, int dueDay,
-        Guid? catId, bool isRecurring, ExpensePriority priority, DateOnly today)
+        Guid? catId, bool isRecurring, ExpensePriority priority,
+        DateOnly month, DateOnly today)
     {
-        var dueDate = new DateOnly(today.Year, today.Month, dueDay);
+        var dueDate = new DateOnly(month.Year, month.Month, dueDay);
         bool isPaid = dueDate < today;
 
         return new PlannedExpense
