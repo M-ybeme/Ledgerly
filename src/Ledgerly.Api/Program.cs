@@ -54,9 +54,13 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
-// Health checks
-builder.Services.AddHealthChecks()
-    .AddNpgSql(builder.Configuration.GetConnectionString("LedgerlyDb")!);
+// Health checks — NpgSQL check only when a real connection string is available
+{
+    var hcBuilder = builder.Services.AddHealthChecks();
+    var hcConnStr = builder.Configuration.GetConnectionString("LedgerlyDb");
+    if (!string.IsNullOrEmpty(hcConnStr) && !hcConnStr.StartsWith("Host=test"))
+        hcBuilder.AddNpgSql(hcConnStr);
+}
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -155,12 +159,16 @@ builder.Services.PostConfigure<Microsoft.AspNetCore.Authentication.Authenticatio
 var app = builder.Build();
 
 // Auto-migrate and seed on every startup (safe — EF skips already-applied migrations)
-using (var scope = app.Services.CreateScope())
+// Skipped in the "Testing" environment where InMemory DB is used instead.
+if (!app.Environment.IsEnvironment("Testing"))
 {
-    var db = scope.ServiceProvider.GetRequiredService<Ledgerly.Infrastructure.Data.LedgerlyDbContext>();
-    await db.Database.MigrateAsync();
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<Ledgerly.Infrastructure.Data.LedgerlyDbContext>();
+        await db.Database.MigrateAsync();
+    }
+    await DbSeeder.SeedDemoUserAsync(app.Services);
 }
-await DbSeeder.SeedDemoUserAsync(app.Services);
 
 if (app.Environment.IsDevelopment())
 {
@@ -178,9 +186,14 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 });
 
 app.UseCors();
-app.UseRateLimiter();
+// Skip rate limiting in the Testing environment so integration tests don't hit 429s
+if (!app.Environment.IsEnvironment("Testing"))
+    app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
 app.Run();
+
+// Expose Program for WebApplicationFactory in integration tests
+public partial class Program { }

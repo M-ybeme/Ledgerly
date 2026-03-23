@@ -1,6 +1,6 @@
-# Ledgerly — Architecture-First Roadmap (v8)
+# Ledgerly — Architecture-First Roadmap (v9)
 
-*Last Updated: Mar 20, 2026 — Phase 12 complete (all 5 features); Cash Flow Forecast, Account Model, Net Worth Tracking, Insight Engine, and Goal Planner all live*
+*Last Updated: Mar 22, 2026 — Phase 13 complete: 94 tests passing (unit + user isolation + auth flow integration)*
 
 ---
 
@@ -736,4 +736,141 @@ With these five features Ledgerly becomes a **manual-input, privacy-first financ
 
 ---
 
-End of Roadmap v8
+## Phase 13 — Test Coverage & Validation
+
+**Goal:** Close the test gap so the project demonstrates professional-grade quality assurance to any technical reviewer. Every pure service gets unit tests. User isolation gets an integration test. The existing 30 tests stay green.
+
+**Current test baseline:** 30 tests in `tests/Ledgerly.Tests` — `CreditScoreService` (25), `JwtTokenService` (3), `DebtProjectionService` (7). Note: some overlap likely accounts for the 30 total.
+
+---
+
+### Feature 1 — Unit Tests: Pure Application Services ✅ COMPLETE
+
+**Goal:** Every stateless service that takes inputs and returns outputs should have full branch coverage.
+
+* [X] **`GoalPlannerService` tests** (`GoalPlannerServiceTests.cs`):
+  * DebtFree — no debt → OnTrack immediately
+  * DebtFree — target date in the past → NotFeasible
+  * DebtFree — sufficient minimums → OnTrack (no extra required)
+  * DebtFree — affordable extra payment → OnTrack
+  * DebtFree — shortfall < 25% of PMT → AtRisk
+  * DebtFree — shortfall ≥ 25% of PMT → NotFeasible
+  * DebtFree — zero-interest debt (PMT = principal / months)
+  * SaveAmount — required ≤ capacity → OnTrack
+  * SaveAmount — shortfall < 30% of required → AtRisk
+  * SaveAmount — shortfall ≥ 30% of required → NotFeasible
+  * SpendingCap — spending under cap → OnTrack with surplus
+  * SpendingCap — overage ≤ 10% of cap → AtRisk
+  * SpendingCap — overage > 10% of cap → NotFeasible
+
+* [X] **`InsightService` tests** (`InsightServiceTests.cs`):
+  * No debts → "Add your debts" info insight returned
+  * High-APR debt (≥ 24%) → Danger severity
+  * Mid-APR debt (18–24%) → Warning severity
+  * Low-APR debt → Info severity
+  * Debt minimums ≥ 25% of income → Danger
+  * Debt minimums 15–25% of income → Warning
+  * Overdue bills → Danger insight with correct count and total
+  * Unpaid must-pay bills → Warning insight
+  * All bills paid → "All bills paid" info insight
+  * No accounts → "Add your bank accounts" info
+  * Cash < unpaid bills → Danger with correct shortfall
+  * Cash < $500 → Warning low-cash insight
+  * Healthy cash buffer → Info with months-covered calculation
+  * Credit card accounts excluded from available cash calculation
+
+* [X] **`CashFlowForecastService` tests** (`CashFlowForecastServiceTests.cs`):
+  * 30/60/90-day forecast returns exact day count (Theory)
+  * Starting balance propagates correctly to day 1 opening
+  * No events, no burn — balance unchanged throughout
+  * Expense on a known date deducts from closing balance
+  * Daily burn rate compounds daily across the period
+  * `DaysUntilNegative` is null when balance never goes negative
+  * `DaysUntilNegative` is correct when balance crosses zero
+  * `LowestBalance` and `LowestBalanceDate` identify the correct day
+  * Warning generated when balance first goes negative
+  * Low-balance warning generated without going negative
+
+* [X] **`BudgetSummaryService` tests** (`BudgetSummaryServiceTests.cs`):
+  * Actual spend below planned → under budget
+  * Actual spend above planned → over budget, correct overage
+  * Empty transactions → all categories show $0 actual
+  * Summary totals match sum of category lines
+  * Unplanned category appears with zero planned, negative variance
+  * Empty plan + empty transactions → zero totals
+
+---
+
+### Feature 2 — Integration Tests: User Isolation ✅ COMPLETE
+
+**Goal:** Prove that the EF Core global query filter actually prevents cross-user data access. This is the most important security property in the system.
+
+* [X] **Setup**: EF Core InMemory database; `TestCurrentUser` mutable stub swaps active user between queries without rebuilding the context
+* [X] User A `DebtAccounts` query → only User A's debt returned
+* [X] User B `DebtAccounts` query → only User B's debt returned
+* [X] User A queries User B's debt by ID → `null` (filter makes it invisible, not 403)
+* [X] Isolation verified for `Accounts`, `IncomeSources`, `PlannedExpenses`
+* [X] `IgnoreQueryFilters()` confirms both rows ARE in the store — filter is the reason they're hidden
+* [X] Switching users on the same DbContext instance correctly re-scopes all four entity types
+
+---
+
+### Feature 3 — Integration Tests: Auth Flows ✅ COMPLETE
+
+**Goal:** Prove that token issuance, protection, and invalidation actually work end-to-end.
+
+* [X] Valid credentials → 200 with access token + refresh token
+* [X] Invalid password → 401
+* [X] Unconfirmed email → 403
+* [X] Expired access token → 401 on protected endpoint
+* [X] Valid refresh token → new access token issued
+* [X] Used (rotated) refresh token → 401 on second use
+* [X] `POST /auth/change-password` with wrong current password → 400
+* [X] `POST /auth/change-password` with correct password → 200
+
+---
+
+### Feature 4 — Regression: Existing Tests Stay Green ✅ COMPLETE
+
+* [X] All 94 tests pass after Phase 13 additions (85 pre-existing + 9 new auth flow tests)
+* [X] `dotnet test` from solution root runs all test projects cleanly
+* [X] No test depends on database state left by another test (proper isolation/teardown)
+
+---
+
+### Phase 13 Positioning
+
+Tests are the difference between a portfolio project and a professional project. A hiring manager who clones this repo will run `dotnet test` within the first five minutes. Phase 13 makes that moment count.
+
+| Test Category | What It Proves |
+|---|---|
+| GoalPlannerService unit tests | PMT math, feasibility logic, edge cases handled |
+| InsightService unit tests | Threshold rules, severity logic, all branches covered |
+| CashFlowForecastService unit tests | Day-by-day balance loop, warning triggers |
+| BudgetSummaryService unit tests | Aggregation correctness |
+| User isolation integration tests | Global query filter actually works in production conditions |
+| Auth flow integration tests | JWT issuance, rotation, and rejection all verified |
+
+**Target on completion:** 80+ tests, all green, covering every pure service and the two most critical security properties of the system.
+
+---
+
+### Phase 13 Implementation Notes
+
+**Test infrastructure decisions:**
+
+- `WebApplicationFactory<Program>` with the minimal-API hosting model (`WebApplication.CreateBuilder`) reads configuration eagerly during service registration — before `ConfigureAppConfiguration` callbacks run. Environment variables set in the factory constructor are the only reliable way to inject config values (e.g. `Jwt__Secret`) before `Program.cs` reads them. `ConfigureAppConfiguration` is still useful for non-critical overrides but cannot substitute for env vars when config is read at startup.
+
+- `app.UseRateLimiter()` and the NpgSQL health check registration were both guarded for the `"Testing"` environment. Middleware guards (`app.Environment.IsEnvironment(...)`) work correctly because they're evaluated after `builder.Build()`, at which point `WebApplicationFactory`'s `UseEnvironment("Testing")` has taken effect. Service-registration guards do not work for the same reason config overrides don't.
+
+- The EF Core global query filter user-isolation tests use a nested `private sealed class TestCurrentUser : ICurrentUserService` (not `file sealed class`) because `file`-local types cannot appear in method signatures of non-file-local members (CS9051).
+
+- `PlannedExpense.IsPaid` is a computed property (`PaidDate.HasValue`), not directly settable. Test helpers leave `PaidDate = null` to represent unpaid expenses.
+
+- Auth flow tests build expired JWTs manually using the test secret. The expiry must be at least 6 minutes in the past to exceed the JWT validator's default 5-minute clock skew allowance (`ClockSkew = TimeSpan.FromMinutes(5)`).
+
+**Final test count:** 94 tests — 0 failed, 0 skipped.
+
+---
+
+End of Roadmap v9
