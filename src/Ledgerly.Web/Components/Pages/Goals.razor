@@ -161,6 +161,21 @@
             Select a goal type above and click <strong>Calculate</strong> to see your plan.
         </div>
     }
+
+    @if (result is not null)
+    {
+        <div style="margin-top:.75rem; display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
+            @{
+                var confLevel = result.ConfidenceLevel ?? "Low";
+                var confClass = confLevel switch { "High" => "ld-confidence--high", "Medium" => "ld-confidence--medium", _ => "ld-confidence--low" };
+                var confIcon = confLevel switch { "High" => "✓", "Medium" => "~", _ => "?" };
+            }
+            <span class="ld-confidence @confClass">@confIcon Confidence: @confLevel</span>
+            <span style="font-size:.78rem; color:var(--ld-text-secondary);">
+                Based on consistent monthly payments and no new debt. Actual results will vary.
+            </span>
+        </div>
+    }
 </div>
 
 @code {

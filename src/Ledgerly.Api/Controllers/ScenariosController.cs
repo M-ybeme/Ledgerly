@@ -90,12 +90,18 @@ public class ScenariosController : ControllerBase
         }
     }
 
-    // GET /scenarios/{id}/projection
+    // GET /scenarios/{id}/projection[?extraPaymentOverride=N]
     [HttpGet("{id:guid}/projection")]
-    public async Task<ActionResult<ProjectionResultDto>> GetProjection(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ProjectionResultDto>> GetProjection(
+        Guid id,
+        [FromQuery] decimal? extraPaymentOverride,
+        CancellationToken ct)
     {
         var scenario = await _svc.GetScenarioEntityAsync(id, ct);
         if (scenario is null) return NotFound();
+
+        if (extraPaymentOverride.HasValue)
+            scenario.ExtraMonthlyPayment = extraPaymentOverride.Value;
 
         var result = _projection.Project(scenario);
         return Ok(result);

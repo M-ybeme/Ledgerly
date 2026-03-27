@@ -41,7 +41,10 @@
 }
 else if (debts.Count == 0)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No debt accounts yet. Add one above.</RadzenAlert>
+    <RadzenCard>
+        <EmptyState Icon="💳" Title="No debt accounts yet."
+                    Message="Add your first debt to start tracking payoff progress and running projections." />
+    </RadzenCard>
 }
 else
 {

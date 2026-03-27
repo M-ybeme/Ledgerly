@@ -9,4 +9,5 @@ public sealed record GoalPlanResultDto(
     string? Recommendation,
     decimal? RequiredMonthly,
     decimal? CurrentCapacity,
-    decimal? Shortfall);
+    decimal? Shortfall,
+    string? ConfidenceLevel = null);

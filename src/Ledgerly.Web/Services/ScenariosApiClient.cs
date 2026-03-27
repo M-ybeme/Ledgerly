@@ -44,9 +44,12 @@ public sealed class ScenariosApiClient
         return created ?? throw new InvalidOperationException("API returned empty response.");
     }
 
-    public async Task<ProjectionResultDto> GetProjectionAsync(Guid scenarioId, CancellationToken ct = default)
+    public async Task<ProjectionResultDto> GetProjectionAsync(Guid scenarioId, decimal? extraPaymentOverride = null, CancellationToken ct = default)
     {
-        var result = await _http.GetFromJsonAsync<ProjectionResultDto>($"/scenarios/{scenarioId}/projection", ct);
+        var url = extraPaymentOverride.HasValue
+            ? $"/scenarios/{scenarioId}/projection?extraPaymentOverride={extraPaymentOverride.Value}"
+            : $"/scenarios/{scenarioId}/projection";
+        var result = await _http.GetFromJsonAsync<ProjectionResultDto>(url, ct);
         return result ?? throw new InvalidOperationException("API returned empty response.");
     }
 

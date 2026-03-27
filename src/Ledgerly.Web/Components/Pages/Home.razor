@@ -16,6 +16,7 @@
 @inject Ledgerly.Web.Services.IncomeSourcesApiClient IncomeSourcesApi
 @inject Ledgerly.Web.Services.PlannedExpensesApiClient PlannedExpensesApi
 @inject Ledgerly.Web.Services.DashboardApiClient DashboardApi
+@inject Ledgerly.Web.Services.BudgetCategoriesApiClient CategoriesApi
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 @inject NavigationManager Nav
@@ -28,8 +29,31 @@
 {
     <RadzenText>Loading…</RadzenText>
 }
+else if (!HasAnyData)
+{
+    <div class="ld-hero-card" style="margin-bottom:1.5rem;">
+        <div class="ld-hero-card-eyebrow">Welcome to Ledgerly</div>
+        <h2 class="ld-hero-card-headline">Your financial plan starts here.</h2>
+        <p class="ld-hero-card-sub">Answer a few quick questions and see your debt-free date, cash runway, and risk warnings in under 2 minutes.</p>
+        <RadzenButton Text="Build My Plan" Icon="rocket_launch" ButtonStyle="ButtonStyle.Primary"
+                      Click="OpenWizard" />
+    </div>
+}
 else
 {
+    @* First-Win Hero Card *@
+    @if (FirstWinHeadline is not null)
+    {
+        <div class="ld-hero-card rz-mb-5">
+            <div class="ld-hero-card-eyebrow">@FirstWinEyebrow</div>
+            <h2 class="ld-hero-card-headline">@FirstWinHeadline</h2>
+            @if (FirstWinSub is not null)
+            {
+                <p class="ld-hero-card-sub">@FirstWinSub</p>
+            }
+        </div>
+    }
+
     <!-- Summary Cards -->
     <RadzenStack Orientation="Orientation.Horizontal" Gap="1.25rem" Wrap="FlexWrap.Wrap" class="rz-mb-6">
         <RadzenCard Style="flex:1; min-width:180px;">
@@ -165,6 +189,81 @@ else
                 <RadzenLegend Visible="true" />
                 <RadzenChartTooltipOptions Shared="true" />
             </RadzenChart>
+
+            <!-- Income This Month -->
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween"
+                         AlignItems="AlignItems.Center" style="margin-top:1.5rem; margin-bottom:.75rem;">
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap=".5rem">
+                    <RadzenText TextStyle="TextStyle.H6" style="margin:0;">Income This Month</RadzenText>
+                    <RadzenBadge BadgeStyle="BadgeStyle.Success" Text="@monthIncome.ToString("C0")" />
+                </RadzenStack>
+                <RadzenButton Text="@(showLogIncomeForm ? "Cancel" : "+ Log Income")"
+                              ButtonStyle="@(showLogIncomeForm ? ButtonStyle.Light : ButtonStyle.Success)"
+                              Size="ButtonSize.Small"
+                              Click="@(() => showLogIncomeForm = !showLogIncomeForm)" />
+            </RadzenStack>
+
+            @if (showLogIncomeForm)
+            {
+                <RadzenCard Variant="Variant.Outlined" class="rz-mb-3">
+                    @if (incomeCategories.Count == 0)
+                    {
+                        <RadzenText style="font-size:.9rem;">
+                            No income categories set up yet. Go to
+                            <a href="budget" style="color:var(--rz-primary);">Budget → Categories</a>
+                            and add a category with type "Income".
+                        </RadzenText>
+                    }
+                    else
+                    {
+                        <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
+                            <div>
+                                <label class="ld-label">Description</label>
+                                <RadzenTextBox @bind-Value="logIncomeDesc" Placeholder="e.g. Paycheck" Style="width:180px;" />
+                            </div>
+                            <div>
+                                <label class="ld-label">Amount ($)</label>
+                                <RadzenNumeric @bind-Value="logIncomeAmount" TValue="decimal" Min="0.01m" Format="N2" Style="width:130px;" />
+                            </div>
+                            <div>
+                                <label class="ld-label">Date</label>
+                                <RadzenDatePicker @bind-Value="logIncomeDateProxy" DateFormat="yyyy-MM-dd" Style="width:150px;" />
+                            </div>
+                            <div>
+                                <label class="ld-label">Category</label>
+                                <RadzenDropDown @bind-Value="logIncomeCategoryId" Data="@incomeCategories"
+                                                TextProperty="Name" ValueProperty="Id" Style="width:180px;" />
+                            </div>
+                            <RadzenButton Text="Save" Icon="check" ButtonStyle="ButtonStyle.Primary"
+                                          Click="LogIncomeAsync" IsBusy="logIncomeBusy" />
+                        </div>
+                    }
+                </RadzenCard>
+            }
+
+            @if (thisMonthIncomeTransactions.Count == 0)
+            {
+                <div style="font-size:.9rem; color:var(--rz-text-secondary-color); margin-bottom:1rem;">
+                    No income logged yet this month.
+                </div>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@thisMonthIncomeTransactions" TItem="TransactionDto" AllowSorting="true" class="rz-mb-4">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="TransactionDto" Title="Description" Property="Description" />
+                        <RadzenDataGridColumn TItem="TransactionDto" Title="Category" Property="CategoryName" Width="160px" />
+                        <RadzenDataGridColumn TItem="TransactionDto" Title="Date" Width="110px">
+                            <Template Context="t">@t.Date.ToString("MMM d")</Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TransactionDto" Title="Amount" Width="130px">
+                            <Template Context="t">
+                                <span style="color:#6aab3e; font-weight:600;">+@t.Amount.ToString("C2")</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
 
             <!-- Planned Expenses for this month -->
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center" style="margin-top:1.5rem; margin-bottom:.75rem;">
@@ -465,6 +564,8 @@ else
     private List<IncomeSourceDto> incomeSources = [];
     private List<PlannedExpenseDto> plannedExpenses = [];
     private List<PlannedExpenseDto> currentMonthExpenses = [];
+    private List<BudgetCategoryDto> incomeCategories = [];
+    private List<TransactionDto> thisMonthIncomeTransactions = [];
 
     // Summary
     private decimal totalCash;
@@ -497,7 +598,23 @@ else
     private Guid? markingPaidId;
     private decimal markActualAmount;
 
-    protected override async Task OnInitializedAsync()
+    // Log income form
+    private bool showLogIncomeForm;
+    private string logIncomeDesc = "";
+    private decimal logIncomeAmount;
+    private DateOnly logIncomeDate;
+    private Guid logIncomeCategoryId;
+    private bool logIncomeBusy;
+
+    private DateTime? logIncomeDateProxy
+    {
+        get => logIncomeDate.ToDateTime(TimeOnly.MinValue);
+        set => logIncomeDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : today;
+    }
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
     {
         today = DateOnly.FromDateTime(DateTime.Today);
         try
@@ -512,7 +629,8 @@ else
             var accountsTask = AccountsApi.GetAccountsAsync();
             var netWorthTask = DashboardApi.GetNetWorthSummaryAsync();
             var insightsTask = InsightsApi.GetInsightsAsync();
-            await Task.WhenAll(transactionsTask, debtsTask, incomeTask, plannedTask, summaryTask, accountsTask, netWorthTask, insightsTask);
+            var categoriesTask = CategoriesApi.GetAllAsync();
+            await Task.WhenAll(transactionsTask, debtsTask, incomeTask, plannedTask, summaryTask, accountsTask, netWorthTask, insightsTask, categoriesTask);
 
             var transactions = transactionsTask.Result;
             debts = debtsTask.Result;
@@ -523,6 +641,18 @@ else
             totalCash = accounts.Where(a => a.Type != Domain.Accounts.AccountType.CreditCard).Sum(a => a.Balance);
             netWorthSummary = netWorthTask.Result;
             insights = insightsTask.Result;
+            incomeCategories = categoriesTask.Result
+                .Where(c => c.Type == CategoryType.Income)
+                .ToList();
+            thisMonthIncomeTransactions = transactions
+                .Where(t => t.Date.Year == today.Year && t.Date.Month == today.Month
+                         && t.CategoryType == CategoryType.Income)
+                .OrderByDescending(t => t.Date)
+                .ToList();
+
+            if (logIncomeCategoryId == Guid.Empty && incomeCategories.Count > 0)
+                logIncomeCategoryId = incomeCategories[0].Id;
+            logIncomeDate = today;
 
             totalDebt = debts.Sum(d => d.Balance);
             expectedMonthlyIncome = incomeSources.Sum(s => s.MonthlyAmount);
@@ -571,6 +701,59 @@ else
         finally
         {
             loading = false;
+        }
+    }
+
+    // ── First-Win / Empty State helpers ──────────────────────────────
+
+    private bool HasAnyData => debts.Count > 0 || incomeSources.Count > 0 || accounts.Count > 0;
+
+    private string? FirstWinHeadline
+    {
+        get
+        {
+            if (debts.Count > 0 && totalDebt > 0)
+            {
+                var totalMinPayments = debts.Sum(d => d.MinimumPayment);
+                if (totalMinPayments > 0)
+                {
+                    var roughMonths = (int)Math.Ceiling((double)(totalDebt / totalMinPayments));
+                    return $"Debt-free in ~{roughMonths} months at minimum payments.";
+                }
+            }
+            if (totalCash > 0 && expectedMonthlyIncome == 0)
+            {
+                var monthlyBurn = currentMonthExpenses.Sum(e => e.PlannedAmount);
+                if (monthlyBurn > 0)
+                {
+                    var runway = (int)(totalCash / monthlyBurn);
+                    return $"~{runway} month{(runway == 1 ? "" : "s")} of cash runway remaining.";
+                }
+            }
+            if (totalCash > 0 && expectedMonthlyIncome > 0)
+            {
+                var surplus = expectedMonthlyIncome - currentMonthExpenses.Sum(e => e.PlannedAmount) - debts.Sum(d => d.MinimumPayment);
+                if (surplus > 0)
+                    return $"You have {surplus.ToString("C0")}/month in surplus to put toward goals.";
+            }
+            return null;
+        }
+    }
+
+    private string FirstWinEyebrow => debts.Count > 0 ? "Your Payoff Snapshot" : "Your Cash Position";
+
+    private string? FirstWinSub
+    {
+        get
+        {
+            if (debts.Count > 0)
+            {
+                var interestSavingTip = debts.Count > 1
+                    ? "Run a Scenario to model avalanche or snowball strategies and see exactly how much interest you can save."
+                    : "Add extra monthly payments in a Scenario to accelerate your payoff.";
+                return interestSavingTip;
+            }
+            return null;
         }
     }
 
@@ -682,15 +865,67 @@ else
     private static string FormatCurrency(object value) =>
         value is double d ? d.ToString("C0") : value?.ToString() ?? "";
 
-    private Task OpenAccounts() =>
-        DialogService.OpenAsync<Accounts>("Manage Accounts", null,
+    private async Task LogIncomeAsync()
+    {
+        if (logIncomeAmount <= 0 || string.IsNullOrWhiteSpace(logIncomeDesc) || logIncomeCategoryId == Guid.Empty)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, "Incomplete", "Fill in description, amount, and category.");
+            return;
+        }
+        logIncomeBusy = true;
+        try
+        {
+            await TransactionsApi.CreateAsync(new CreateTransactionRequest(
+                logIncomeDesc, logIncomeAmount, logIncomeDate, logIncomeCategoryId));
+            NotificationService.Notify(NotificationSeverity.Success, "Income logged",
+                $"{logIncomeAmount:C2} recorded for {logIncomeDate:MMM d}.");
+            logIncomeDesc = "";
+            logIncomeAmount = 0;
+            showLogIncomeForm = false;
+            await LoadAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
+        }
+        finally
+        {
+            logIncomeBusy = false;
+        }
+    }
+
+    private async Task OpenWizard()
+    {
+        await DialogService.OpenAsync<Ledgerly.Web.Components.Dialogs.OnboardingWizardDialog>(
+            "Let's build your plan", null,
+            new DialogOptions { Width = "720px", Resizable = false, CloseDialogOnOverlayClick = false });
+        loading = true;
+        StateHasChanged();
+        await LoadAsync();
+    }
+
+    private async Task OpenAccounts()
+    {
+        await DialogService.OpenAsync<Accounts>("Manage Accounts", null,
             new DialogOptions { Width = "900px", Resizable = true, CloseDialogOnOverlayClick = true });
+        await LoadAsync();
+        StateHasChanged();
+    }
 
-    private Task OpenCategories() =>
-        DialogService.OpenAsync<BudgetCategories>("Manage Categories", null,
+    private async Task OpenCategories()
+    {
+        await DialogService.OpenAsync<BudgetCategories>("Manage Categories", null,
             new DialogOptions { Width = "700px", Resizable = true, CloseDialogOnOverlayClick = true });
+        await LoadAsync();
+        StateHasChanged();
+    }
 
-    private Task OpenIncomeSources() =>
-        DialogService.OpenAsync<IncomeSources>("Income Sources", null,
+    private async Task OpenIncomeSources()
+    {
+        await DialogService.OpenAsync<IncomeSources>("Income Sources", null,
             new DialogOptions { Width = "1000px", Resizable = true, CloseDialogOnOverlayClick = true });
+        await LoadAsync();
+        StateHasChanged();
+    }
 }

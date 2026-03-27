@@ -19,12 +19,41 @@ public sealed class GoalPlannerService
         var monthlyExpenses = thisMonthExpenses.Sum(e => e.PlannedAmount);
         var totalMinimums = debts.Sum(d => d.MinimumPayment);
 
-        return request.GoalType switch
+        var confidence = ComputeConfidence(request.GoalType, debts, incomeSources, thisMonthExpenses);
+
+        var result = request.GoalType switch
         {
-            GoalType.DebtFree   => ComputeDebtFree(request, debts, totalMinimums, monthlyIncome, monthlyExpenses, today),
-            GoalType.SaveAmount => ComputeSaveAmount(request, totalMinimums, monthlyIncome, monthlyExpenses),
+            GoalType.DebtFree    => ComputeDebtFree(request, debts, totalMinimums, monthlyIncome, monthlyExpenses, today),
+            GoalType.SaveAmount  => ComputeSaveAmount(request, totalMinimums, monthlyIncome, monthlyExpenses),
             GoalType.SpendingCap => ComputeSpendingCap(request, monthlyExpenses),
             _ => throw new ArgumentException("Unknown goal type.")
+        };
+
+        return result with { ConfidenceLevel = confidence };
+    }
+
+    // ── Confidence Level ────────────────────────────────────────────────────
+
+    private static string ComputeConfidence(
+        GoalType goalType,
+        List<DebtAccountDto> debts,
+        List<IncomeSourceDto> incomeSources,
+        List<PlannedExpenseDto> expenses)
+    {
+        bool hasIncome = incomeSources.Count > 0;
+        bool hasExpenses = expenses.Count > 0;
+        bool hasDebts = debts.Count > 0;
+
+        return goalType switch
+        {
+            GoalType.DebtFree    => hasDebts && hasIncome && hasExpenses ? "High"
+                                  : hasDebts && hasIncome ? "Medium"
+                                  : "Low",
+            GoalType.SaveAmount  => hasIncome && hasExpenses ? "High"
+                                  : hasIncome ? "Medium"
+                                  : "Low",
+            GoalType.SpendingCap => hasExpenses ? "High" : "Low",
+            _                    => "Low"
         };
     }
 

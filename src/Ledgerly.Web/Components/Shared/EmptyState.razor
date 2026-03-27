@@ -1,0 +1,22 @@
+<div class="ld-empty-state">
+    @if (Icon is not null)
+    {
+        <div class="ld-empty-state-icon">@Icon</div>
+    }
+    <div class="ld-empty-state-title">@Title</div>
+    @if (Message is not null)
+    {
+        <div class="ld-empty-state-message">@Message</div>
+    }
+    @if (ChildContent is not null)
+    {
+        <div class="ld-empty-state-actions">@ChildContent</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Nothing here yet.";
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -502,3 +502,267 @@ a:hover {
     border-color: var(--ld-primary-dark);
     color: var(--ld-tertiary);
 }
+
+/* ============================================================
+   Empty State
+   ============================================================ */
+.ld-empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+}
+
+.ld-empty-state-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+    line-height: 1;
+}
+
+.ld-empty-state-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--rz-text-color);
+}
+
+.ld-empty-state-message {
+    font-size: 0.875rem;
+    color: var(--ld-text-secondary);
+    margin: 0 auto 1.25rem;
+    max-width: 380px;
+}
+
+.ld-empty-state-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* ============================================================
+   Onboarding Wizard
+   ============================================================ */
+.ld-wizard-steps {
+    display: flex;
+    gap: 0;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid var(--ld-border-color);
+}
+
+.ld-wizard-step {
+    padding: .65rem 1.25rem;
+    font-size: .85rem;
+    font-weight: 500;
+    color: var(--ld-text-secondary);
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    white-space: nowrap;
+}
+
+.ld-wizard-step--active {
+    color: var(--ld-text-primary);
+    border-bottom-color: var(--ld-primary);
+    font-weight: 700;
+}
+
+.ld-wizard-step--done {
+    color: var(--ld-primary-dark);
+}
+
+.ld-wizard-nav {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    align-items: center;
+}
+
+/* ============================================================
+   What-If Slider Panel
+   ============================================================ */
+.ld-whatif-panel {
+    margin-top: 1rem;
+    padding: 1rem 1.25rem;
+    background: var(--ld-bg-surface);
+    border-radius: 8px;
+    border: 1px solid var(--ld-border-color);
+}
+
+.ld-whatif-result {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+    font-size: .9rem;
+}
+
+.ld-whatif-stat {
+    text-align: center;
+}
+
+.ld-whatif-stat-label {
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--ld-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.ld-whatif-stat-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--ld-text-primary);
+}
+
+/* ============================================================
+   Inline Recommendation Banner
+   ============================================================ */
+.ld-inline-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: .875rem;
+    margin-bottom: 1rem;
+}
+
+.ld-inline-tip--info {
+    background: rgba(91,141,217,0.10);
+    border-left: 3px solid #5b8dd9;
+}
+
+.ld-inline-tip--warning {
+    background: rgba(240,160,112,0.12);
+    border-left: 3px solid #f0a070;
+}
+
+.ld-inline-tip--danger {
+    background: rgba(224,92,92,0.12);
+    border-left: 3px solid #e05c5c;
+}
+
+/* ============================================================
+   First-Win Hero Card
+   ============================================================ */
+.ld-hero-card {
+    background: linear-gradient(135deg, var(--ld-secondary) 0%, var(--ld-tertiary) 100%);
+    color: #fff;
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.ld-hero-card::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 180px;
+    height: 180px;
+    background: rgba(181,213,66,0.12);
+    border-radius: 50%;
+}
+
+.ld-hero-card-eyebrow {
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ld-primary);
+    margin-bottom: .5rem;
+}
+
+.ld-hero-card-headline {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #fff;
+    margin: 0 0 .35rem;
+    line-height: 1.2;
+}
+
+.ld-hero-card-sub {
+    font-size: .9rem;
+    color: rgba(255,255,255,0.75);
+    margin: 0 0 1rem;
+}
+
+.ld-hero-card-action {
+    font-size: .85rem;
+    color: var(--ld-primary);
+    font-weight: 600;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    text-decoration: underline;
+}
+
+/* ============================================================
+   CSV Import
+   ============================================================ */
+.ld-import-dropzone {
+    border: 2px dashed var(--ld-border-color);
+    border-radius: 10px;
+    padding: 2.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+
+.ld-import-dropzone:hover {
+    border-color: var(--ld-primary);
+    background: rgba(181,213,66,0.05);
+}
+
+.ld-import-preview {
+    max-height: 340px;
+    overflow-y: auto;
+    border: 1px solid var(--ld-border-color);
+    border-radius: 8px;
+    margin-top: 1rem;
+}
+
+.ld-import-preview table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .875rem;
+}
+
+.ld-import-preview th {
+    padding: 8px 12px;
+    text-align: left;
+    background: var(--ld-bg-surface);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+
+.ld-import-preview td {
+    padding: 6px 12px;
+    border-top: 1px solid var(--ld-border-color);
+}
+
+.ld-import-preview tr.ld-import-skip td {
+    color: var(--ld-text-secondary);
+    text-decoration: line-through;
+}
+
+/* Confidence badge */
+.ld-confidence {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .75rem;
+    font-weight: 600;
+    padding: .2rem .55rem;
+    border-radius: 999px;
+}
+
+.ld-confidence--high   { background: rgba(106,171,62,0.15);  color: #4a8a2a; }
+.ld-confidence--medium { background: rgba(240,160,112,0.18); color: #b86000; }
+.ld-confidence--low    { background: rgba(224,92,92,0.15);   color: #b03030; }
+
+[data-theme="dark"] .ld-confidence--high   { color: #8dcc5a; }
+[data-theme="dark"] .ld-confidence--medium { color: #f0a070; }
+[data-theme="dark"] .ld-confidence--low    { color: #e05c5c; }

@@ -873,4 +873,135 @@ Tests are the difference between a portfolio project and a professional project.
 
 ---
 
-End of Roadmap v9
+## Phase 14 — UX Polish: First-Value Fast Lane
+
+**Goal:** Reduce time-to-value for new users and improve the experience when pages have no data. A user who signs up and sees nothing will leave. Phase 14 fixes that.
+
+---
+
+### Feature 1 — Empty State Design ✅ COMPLETE
+
+**Goal:** Every page with a data list gets a designed empty state — a helpful message and a direct action — instead of a blank content area.
+
+* [X] Shared `<EmptyState>` Blazor component (`Components/Shared/EmptyState.razor`) — accepts `Title`, `Message`, `Icon`, and `ChildContent` action slot.
+* [X] `Components/_Imports.razor` — added `@using Ledgerly.Web.Components.Shared`
+* [X] **Debts page** — "No debt accounts yet." with icon and message
+* [X] **Scenarios page** — "No scenarios yet." with icon and message
+* [X] **Budget page** — "No budget plans yet." with icon and message
+* [X] **Accounts page** — "No accounts yet." with icon and message
+* [X] **Dashboard** — "Welcome to Ledgerly" hero card with "Build My Plan" CTA when user has no data; computed via `HasAnyData` property
+
+---
+
+### Feature 2 — Onboarding Wizard ✅ COMPLETE
+
+**Goal:** Guide new users through minimum viable data entry (5 steps max) so they see a meaningful result within 90 seconds of signing up.
+
+* [X] `/onboarding` page (`Components/Pages/Onboarding.razor`)
+* [X] Step 1: Goal selection ("Get out of debt / Stay afloat / Build savings") — stored in wizard state only
+* [X] Step 2: Income — name, amount, PayFrequency dropdown. Saved via `IncomeSourcesApiClient.CreateAsync` on Next
+* [X] Step 3: Debts — dynamic list of (Name, Balance, APR, MinPayment) entries. Each saved via `DebtAccountsApiClient.CreateAsync` on Next
+* [X] Step 4: Expenses — Rent, Food, Utilities, Everything else. Each saved via `PlannedExpensesApiClient.CreateAsync` (recurring, due next month 1st)
+* [X] Step 5: Review summary → "Finish Setup" navigates to dashboard
+* [X] Every step has "Skip" / "I'll add later" that advances without saving
+* [X] "Skip setup" link on step 1 goes directly to dashboard
+* [X] Nav link: "Setup Wizard" in sidebar
+
+---
+
+### Feature 3 — First-Win Dashboard Panel ✅ COMPLETE
+
+**Goal:** Immediately surface one high-impact number so users feel value before exploring any other page.
+
+* [X] `HasAnyData` computed property — false when debts, income, and accounts are all empty
+* [X] When `!HasAnyData`: full-page welcome hero card with "Build My Plan" CTA → `/onboarding`
+* [X] When data exists: `ld-hero-card` with computed `FirstWinHeadline` (priority: rough debt-free estimate → cash runway → surplus) shown above summary cards
+* [X] `FirstWinSub` provides one-sentence action hint ("Run a Scenario to model strategies")
+
+---
+
+### Feature 4 — Scenario What-If Slider ✅ COMPLETE
+
+**Goal:** Let users experiment with extra payments on the Scenarios page without committing changes — instant recalculation, no save required.
+
+* [X] `GET /scenarios/{id}/projection?extraPaymentOverride=N` — controller sets `scenario.ExtraMonthlyPayment` on the in-memory copy before projecting
+* [X] `ScenariosApiClient.GetProjectionAsync(scenarioId, extraPaymentOverride?)` — optional override param builds query string
+* [X] Collapsible "What If?" toggle per scenario, below the projection result
+* [X] `RadzenSlider<decimal>` from $0–$1,000 in $25 increments; `Change` event triggers `RunWhatIf`
+* [X] Result shows: new payoff months, months saved, interest saved, total interest
+* [X] "Apply to Scenario" button replaces the main projection result with the overridden one
+* [X] Disclaimer: "Based on consistent monthly payments and no new debt"
+* [X] Snowball inline tip: suggests Avalanche if using Snowball with multiple debts
+
+---
+
+### Feature 5 — Inline Contextual Recommendations ✅ COMPLETE
+
+**Goal:** Surface relevant insights on the pages where action can be taken, not only on the dashboard.
+
+* [X] **Scenarios page** — Snowball tip shown after projection when strategy is Snowball and 2+ debts
+* [X] **Budget page** — Warning banner when selected plan's total lines exceed monthly income (`IncomeSourcesApiClient` added to Budget page)
+* [X] **Cash Flow page** — Red danger card above the chart when `DaysUntilNegative < 30`
+* [X] **Goals page** — Recommendation card already rendered by `GoalPlannerService` for AtRisk/NotFeasible results
+
+---
+
+### Feature 6 — Data Confidence Caveats ✅ COMPLETE
+
+**Goal:** Prevent distrust of projections by being transparent about what is estimated vs. known.
+
+* [X] `string? ConfidenceLevel = null` added to `GoalPlanResultDto` (optional positional parameter)
+* [X] `GoalPlannerService.ComputeConfidence(GoalType, debts, income, expenses)` — returns "High" / "Medium" / "Low"
+* [X] `Compute()` sets `ConfidenceLevel` via `with` expression on the returned record
+* [X] Goals page shows `.ld-confidence` badge (green/amber/red) + "Actual results will vary" disclaimer
+* [X] Scenarios page projection result shows disclaimer line: "Based on consistent monthly payments and no new debt"
+* [X] Cash Flow forecast chart shows disclaimer line below the heading
+
+---
+
+### Feature 7 — CSV Transaction Import ✅ COMPLETE
+
+**Goal:** Let users import transactions from a manual bank export without requiring bank integration.
+
+* [X] `/import` page (`Components/Pages/Import.razor`) — "Import Transactions"
+* [X] `InputFile` reads CSV up to 5 MB; custom `ParseCsv` handles quoted fields, flexible column order
+* [X] Columns: `Date`, `Description`, `Amount` (case-insensitive; accepts `Memo`, `Name`, `Value` aliases)
+* [X] Duplicate detection: same Date + Amount + Description → row pre-checked as skip with "duplicate" label
+* [X] Preview table: checkbox per row, all-select, skip indicator
+* [X] Category dropdown (required before import); amount stored as `Math.Abs` (CSV sign is for user reference)
+* [X] Import loops `TransactionsApiClient.CreateAsync` per selected row; success notification
+* [X] Nav link: "Import" in sidebar
+
+---
+
+### Phase 14 Implementation Notes
+
+**Architecture decisions:**
+
+- `EmptyState` component is in `Components/Shared/` — added namespace to `_Imports.razor` so no per-page import needed.
+- What-If slider mutates the `Scenario` entity's `ExtraMonthlyPayment` in-memory before projecting. The entity is loaded with `GetScenarioEntityAsync` which is not change-tracked for write, so no accidental persistence.
+- `GoalPlanResultDto.ConfidenceLevel` uses a default parameter (`= null`) on the positional record so all 7-argument constructors in the private service methods continue to compile.
+- Budget page loaded `IncomeSourcesApiClient` alongside existing tasks in `WhenAll` — no additional render cycles.
+- CSV import stores `Math.Abs(amount)` — the sign in the imported file indicates income/expense direction for the user's reference only; the assigned category determines the transaction type in Ledgerly's model.
+
+---
+
+### Phase 14 Positioning
+
+Phase 13 proved the system is correct. Phase 14 makes it usable by real people.
+
+| Feature | What It Fixes |
+|---|---|
+| Empty states | Blank pages that make users feel lost |
+| Onboarding wizard | No path to first value for new signups |
+| First-win dashboard | No immediate "aha" moment after login |
+| What-if slider | Projections feel passive — users can't explore |
+| Inline recommendations | Insights are dashboard-only, not where action happens |
+| Data confidence caveats | Users distrust projections they can't verify |
+| CSV import | Manual data entry is the biggest friction point |
+
+**Target on completion:** A new user can sign up, enter minimal data, and see a meaningful financial projection in under 2 minutes.
+
+---
+
+End of Roadmap v11

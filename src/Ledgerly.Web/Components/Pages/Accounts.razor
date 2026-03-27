@@ -38,7 +38,10 @@
 }
 else if (accounts.Count == 0)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No accounts yet. Create one above.</RadzenAlert>
+    <RadzenCard>
+        <EmptyState Icon="🏦" Title="No accounts yet."
+                    Message="Add a checking or savings account to track balances and cash flow." />
+    </RadzenCard>
 }
 else
 {

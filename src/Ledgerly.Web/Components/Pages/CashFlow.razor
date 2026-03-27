@@ -111,8 +111,22 @@
             </div>
         </div>
 
+        @if (forecast.DaysUntilNegative.HasValue && forecast.DaysUntilNegative.Value < 30)
+        {
+            <div class="ld-inline-tip ld-inline-tip--danger" style="margin-bottom:1.5rem; font-size:.95rem;">
+                <span style="font-size:1.3rem;">🔴</span>
+                <div>
+                    <strong>Your balance goes negative in @forecast.DaysUntilNegative.Value days.</strong>
+                    Review your upcoming expenses and consider reducing discretionary spending or deferring non-essential bills.
+                </div>
+            </div>
+        }
+
         <div class="ld-card" style="margin-bottom:1.5rem;">
             <h3 style="margin:0 0 1rem;">Daily Balance Projection</h3>
+            <p style="margin:0 0 .75rem; font-size:.78rem; color:var(--ld-text-secondary);">
+                Based on your income sources and planned expenses. Assumes consistent payments — actual results will vary.
+            </p>
             <RadzenChart Style="height:300px;">
                 <RadzenLineSeries Data="@chartPoints" CategoryProperty="Label" ValueProperty="Balance"
                                   Title="Balance" Smooth="true" />

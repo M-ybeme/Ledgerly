@@ -2,9 +2,11 @@
 @rendermode InteractiveServer
 @using Ledgerly.Contracts.Budget
 @using Ledgerly.Domain.Budget
+@using Ledgerly.Contracts.Income
 @inject Ledgerly.Web.Services.BudgetPlansApiClient PlansApi
 @inject Ledgerly.Web.Services.BudgetCategoriesApiClient CategoriesApi
 @inject Ledgerly.Web.Services.TransactionsApiClient TransactionsApi
+@inject Ledgerly.Web.Services.IncomeSourcesApiClient IncomeApi
 @inject NotificationService NotificationService
 
 <PageTitle>Budget — Ledgerly</PageTitle>
@@ -55,7 +57,10 @@
 }
 else if (plans.Count == 0)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No budget plans yet. Create one above.</RadzenAlert>
+    <RadzenCard>
+        <EmptyState Icon="📋" Title="No budget plans yet."
+                    Message="Create a plan to set category spending targets and track actual transactions against them." />
+    </RadzenCard>
 }
 else
 {
@@ -86,6 +91,16 @@ else
     <RadzenText TextStyle="TextStyle.H5" class="rz-mb-3">
         @selectedPlan.Name — @selectedPlan.StartDate.ToString("MMM d") to @selectedPlan.EndDate.ToString("MMM d, yyyy")
     </RadzenText>
+
+    @if (PlanSpendOverage > 0)
+    {
+        <div class="ld-inline-tip ld-inline-tip--warning rz-mb-4">
+            <span>⚡</span>
+            <span>
+                This plan's total spending (@selectedPlan.Lines.Sum(l => l.PlannedAmount).ToString("C0")) exceeds your monthly income (@monthlyIncome.ToString("C0")) by <strong>@PlanSpendOverage.ToString("C0")</strong>. Consider reducing planned amounts in lower-priority categories.
+            </span>
+        </div>
+    }
 
     <!-- Summary -->
     <RadzenCard class="rz-mb-4">
@@ -267,15 +282,23 @@ else
         set => txDate = value.HasValue ? DateOnly.FromDateTime(value.Value) : txDate;
     }
 
+    private decimal monthlyIncome;
+
+    private decimal PlanSpendOverage => selectedPlan is not null && monthlyIncome > 0
+        ? Math.Max(0m, selectedPlan.Lines.Sum(l => l.PlannedAmount) - monthlyIncome)
+        : 0m;
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             var plansTask = PlansApi.GetAllAsync();
             var categoriesTask = CategoriesApi.GetAllAsync();
-            await Task.WhenAll(plansTask, categoriesTask);
+            var incomeTask = IncomeApi.GetAllAsync();
+            await Task.WhenAll(plansTask, categoriesTask, incomeTask);
             plans = await plansTask;
             allCategories = await categoriesTask;
+            monthlyIncome = (await incomeTask).Sum(s => s.MonthlyAmount);
         }
         catch (Exception ex)
         {

@@ -1,0 +1,342 @@
+@using Ledgerly.Contracts.Debts
+@using Ledgerly.Contracts.Income
+@using Ledgerly.Contracts.Budget
+@using Ledgerly.Contracts.Accounts
+@using Ledgerly.Domain.Income
+@using Ledgerly.Domain.Budget
+@using Ledgerly.Domain.Accounts
+@inject Ledgerly.Web.Services.DebtAccountsApiClient DebtsApi
+@inject Ledgerly.Web.Services.IncomeSourcesApiClient IncomeApi
+@inject Ledgerly.Web.Services.PlannedExpensesApiClient ExpensesApi
+@inject Ledgerly.Web.Services.AccountsApiClient AccountsApi
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+<div style="padding:.25rem 0;">
+
+    <div class="ld-wizard-steps" style="margin-bottom:1.25rem;">
+        @foreach (var (label, idx) in Steps)
+        {
+            var cls = idx < step ? "ld-wizard-step ld-wizard-step--done"
+                    : idx == step ? "ld-wizard-step ld-wizard-step--active"
+                    : "ld-wizard-step";
+            <div class="@cls">@(idx < step ? "✓ " : "")@label</div>
+        }
+    </div>
+
+    @if (error is not null)
+    {
+        <div class="ld-inline-tip ld-inline-tip--danger" style="margin-bottom:1rem;">
+            <span>⚠</span><span>@error</span>
+        </div>
+    }
+
+    @if (step == 0)
+    {
+        <div class="ld-card">
+            <h3 style="margin:0 0 1rem; font-size:1.1rem;">What's your primary financial goal?</h3>
+            <div style="display:flex; flex-direction:column; gap:.6rem;">
+                @foreach (var (label, val) in GoalOptions)
+                {
+                    <button class="@GoalBtnClass(val)" @onclick="@(() => goal = val)"
+                            style="text-align:left; padding:.75rem 1rem;">
+                        @label
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="ld-wizard-nav">
+            <RadzenButton Text="Next" Icon="arrow_forward" ButtonStyle="ButtonStyle.Primary" Click="Next" />
+            <button class="ld-goal-btn" style="font-size:.85rem;" @onclick="Skip">Skip setup</button>
+        </div>
+    }
+
+    @if (step == 1)
+    {
+        <div class="ld-card">
+            <h3 style="margin:0 0 1rem; font-size:1.1rem;">What's your take-home pay?</h3>
+            <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
+                <div>
+                    <label class="ld-label">Income name</label>
+                    <RadzenTextBox @bind-Value="incomeName" Placeholder="e.g. Salary" Style="width:200px;" />
+                </div>
+                <div>
+                    <label class="ld-label">Amount per paycheck ($)</label>
+                    <RadzenNumeric @bind-Value="incomeAmount" Min="0" Format="N0" Style="width:150px;" />
+                </div>
+                <div>
+                    <label class="ld-label">How often are you paid?</label>
+                    <RadzenDropDown @bind-Value="incomeFrequency"
+                                    Data="@FrequencyOptions"
+                                    TextProperty="Label"
+                                    ValueProperty="Value"
+                                    Style="width:240px;" />
+                </div>
+            </div>
+            <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-top:.75rem;">
+                <div>
+                    <label class="ld-label">Bank account name</label>
+                    <RadzenTextBox @bind-Value="accountName" Placeholder="e.g. Chase Checking" Style="width:200px;" />
+                </div>
+                <div>
+                    <label class="ld-label">Account type</label>
+                    <RadzenDropDown @bind-Value="accountType"
+                                    Data="@AccountTypeOptions"
+                                    TextProperty="Label"
+                                    ValueProperty="Value"
+                                    Style="width:180px;" />
+                </div>
+            </div>
+            @if (incomeAmount > 0)
+            {
+                <p style="margin:.75rem 0 0; font-size:.85rem; color:var(--ld-text-secondary);">
+                    ≈ @ToMonthly(incomeAmount, incomeFrequency).ToString("C0") per month
+                </p>
+            }
+        </div>
+        <div class="ld-wizard-nav">
+            <RadzenButton Text="Next" Icon="arrow_forward" ButtonStyle="ButtonStyle.Primary" Click="Next" />
+            <button class="ld-goal-btn" style="font-size:.85rem;" @onclick="NextSkip">Skip this step</button>
+            <button class="ld-goal-btn" style="font-size:.85rem;" @onclick="Back">← Back</button>
+        </div>
+    }
+
+    @if (step == 2)
+    {
+        <div class="ld-card">
+            <h3 style="margin:0 0 1rem; font-size:1.1rem;">Do you have any debts?</h3>
+            @foreach (var (d, i) in debtEntries.Select((d, i) => (d, i)))
+            {
+                <div style="display:flex; gap:.75rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:.75rem; padding-bottom:.75rem; border-bottom:1px solid var(--ld-border-color);">
+                    <div>
+                        <label class="ld-label">Name</label>
+                        <RadzenTextBox Value="@d.Name" ValueChanged="@(v => d.Name = v)"
+                                       Placeholder="e.g. Chase Visa" Style="width:180px;" />
+                    </div>
+                    <div>
+                        <label class="ld-label">Balance ($)</label>
+                        <RadzenNumeric TValue="decimal" Value="@d.Balance" ValueChanged="@(v => d.Balance = v)"
+                                       Min="0" Format="N0" Style="width:120px;" />
+                    </div>
+                    <div>
+                        <label class="ld-label">APR (%)</label>
+                        <RadzenNumeric TValue="decimal" Value="@d.Rate" ValueChanged="@(v => d.Rate = v)"
+                                       Min="0" Max="100" Step="0.01m" Format="F2" Style="width:100px;" />
+                    </div>
+                    <div>
+                        <label class="ld-label">Min Payment ($)</label>
+                        <RadzenNumeric TValue="decimal" Value="@d.MinPayment" ValueChanged="@(v => d.MinPayment = v)"
+                                       Min="0" Format="N0" Style="width:110px;" />
+                    </div>
+                    @if (debtEntries.Count > 1)
+                    {
+                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small"
+                                      Click="@(() => debtEntries.RemoveAt(i))" />
+                    }
+                </div>
+            }
+            <RadzenButton Text="Add another debt" Icon="add" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                          Click="@(() => debtEntries.Add(new()))" />
+        </div>
+        <div class="ld-wizard-nav">
+            <RadzenButton Text="Next" Icon="arrow_forward" ButtonStyle="ButtonStyle.Primary" Click="Next" />
+            <button class="ld-goal-btn" style="font-size:.85rem;" @onclick="NextSkip">I'll add debts later</button>
+            <button class="ld-goal-btn" style="font-size:.85rem;" @onclick="Back">← Back</button>
+        </div>
+    }
+
+    @if (step == 3)
+    {
+        <div class="ld-card">
+            <h3 style="margin:0 0 .5rem; font-size:1.1rem;">Roughly, what are your monthly expenses?</h3>
+            <p style="margin:0 0 1rem; font-size:.85rem; color:var(--ld-text-secondary);">Leave blank to skip a category.</p>
+            @foreach (var e in expenseEntries)
+            {
+                <div style="display:flex; gap:1rem; align-items:flex-end; margin-bottom:.65rem;">
+                    <div style="width:150px; font-weight:500; padding-bottom:2px;">@e.Label</div>
+                    <div>
+                        <label class="ld-label">Amount ($)</label>
+                        <RadzenNumeric TValue="decimal" Value="@e.Amount" ValueChanged="@(v => e.Amount = v)"
+                                       Min="0" Format="N0" Style="width:130px;" />
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="ld-wizard-nav">
+            <RadzenButton Text="Next" Icon="arrow_forward" ButtonStyle="ButtonStyle.Primary" Click="Next" />
+            <button class="ld-goal-btn" style="font-size:.85rem;" @onclick="NextSkip">Skip expenses</button>
+            <button class="ld-goal-btn" style="font-size:.85rem;" @onclick="Back">← Back</button>
+        </div>
+    }
+
+    @if (step == 4)
+    {
+        <div class="ld-card">
+            <h3 style="margin:0 0 1rem; font-size:1.1rem;">Here's what we'll set up for you</h3>
+            <p style="margin:0 0 1rem; font-size:.85rem; color:var(--ld-text-secondary);">
+                Nothing is saved until you click <strong>Finish Setup</strong>.
+            </p>
+            <div style="display:flex; flex-direction:column; gap:.5rem; font-size:.93rem;">
+                <div><strong>Goal:</strong> @(goal ?? "Not set")</div>
+                @if (incomeAmount > 0)
+                {
+                    <div>
+                        <strong>Income:</strong> @incomeName — @incomeAmount.ToString("C0") @FrequencyLabel(incomeFrequency)
+                        <span style="color:var(--ld-text-secondary);"> (~@ToMonthly(incomeAmount, incomeFrequency).ToString("C0")/month)</span>
+                    </div>
+                    <div>
+                        <strong>Account:</strong> @accountName (@accountType)
+                    </div>
+                }
+                @if (debtEntries.Any(d => d.Balance > 0))
+                {
+                    <div>
+                        <strong>Debts:</strong> @debtEntries.Count(d => d.Balance > 0) account(s)
+                        totalling @debtEntries.Where(d => d.Balance > 0).Sum(d => d.Balance).ToString("C0")
+                    </div>
+                }
+                @if (expenseEntries.Any(e => e.Amount > 0))
+                {
+                    <div>
+                        <strong>Expenses:</strong> @expenseEntries.Where(e => e.Amount > 0).Sum(e => e.Amount).ToString("C0")/month
+                        across @expenseEntries.Count(e => e.Amount > 0) category/categories
+                    </div>
+                }
+                @if (incomeAmount == 0 && !debtEntries.Any(d => d.Balance > 0) && !expenseEntries.Any(e => e.Amount > 0))
+                {
+                    <div style="color:var(--ld-text-secondary);">No data entered — you can add details from the individual pages at any time.</div>
+                }
+            </div>
+        </div>
+        <div class="ld-wizard-nav">
+            <RadzenButton Text="Finish Setup" Icon="check" ButtonStyle="ButtonStyle.Primary"
+                          Click="Finish" IsBusy="saving" />
+            <button class="ld-goal-btn" style="font-size:.85rem;" @onclick="Back">← Back</button>
+        </div>
+    }
+
+</div>
+
+@code {
+    private sealed class DebtEntry { public string Name = ""; public decimal Balance; public decimal Rate; public decimal MinPayment; }
+    private sealed class ExpenseEntry { public string Label = ""; public decimal Amount; public bool MustPay; }
+    private sealed record FreqOption(PayFrequency Value, string Label);
+    private sealed record AcctOption(AccountType Value, string Label);
+
+    private static readonly (string Label, int Idx)[] Steps =
+    [
+        ("Goal", 0), ("Income", 1), ("Debts", 2), ("Expenses", 3), ("Review", 4)
+    ];
+
+    private static readonly (string Label, string Value)[] GoalOptions =
+    [
+        ("🎯  Get out of debt — I want a clear payoff timeline", "Get out of debt"),
+        ("💧  Stay afloat — I want to track cash and avoid surprises", "Stay afloat"),
+        ("💰  Build savings — I want to hit a savings target", "Build savings"),
+    ];
+
+    private static readonly FreqOption[] FrequencyOptions =
+    [
+        new(PayFrequency.Weekly,      "Weekly — every 7 days"),
+        new(PayFrequency.Biweekly,    "Bi-weekly — every 2 weeks"),
+        new(PayFrequency.SemiMonthly, "Twice a month — 1st & 15th"),
+        new(PayFrequency.Monthly,     "Monthly — once a month"),
+    ];
+
+    private static readonly AcctOption[] AccountTypeOptions =
+    [
+        new(AccountType.Checking, "Checking"),
+        new(AccountType.Savings,  "Savings"),
+        new(AccountType.Cash,     "Cash"),
+    ];
+
+    private int step;
+    private bool saving;
+    private string? error;
+    private string? goal;
+
+    private string incomeName = "Salary";
+    private decimal incomeAmount;
+    private PayFrequency incomeFrequency = PayFrequency.Monthly;
+    private string accountName = "Checking Account";
+    private AccountType accountType = AccountType.Checking;
+
+    private List<DebtEntry> debtEntries = [new()];
+
+    private List<ExpenseEntry> expenseEntries =
+    [
+        new() { Label = "Rent / Mortgage", MustPay = true },
+        new() { Label = "Food / Groceries", MustPay = true },
+        new() { Label = "Utilities",         MustPay = true },
+        new() { Label = "Everything else",   MustPay = false },
+    ];
+
+    private string GoalBtnClass(string val) =>
+        val == goal ? "ld-goal-btn ld-goal-btn--active" : "ld-goal-btn";
+
+    private static decimal ToMonthly(decimal amount, PayFrequency freq) => freq switch
+    {
+        PayFrequency.Weekly      => Math.Round(amount * 52m / 12m, 2),
+        PayFrequency.Biweekly    => Math.Round(amount * 26m / 12m, 2),
+        PayFrequency.SemiMonthly => amount * 2m,
+        _                        => amount,
+    };
+
+    private static string FrequencyLabel(PayFrequency freq) => freq switch
+    {
+        PayFrequency.Weekly      => "/ week",
+        PayFrequency.Biweekly    => "/ 2 weeks",
+        PayFrequency.SemiMonthly => "/ half-month",
+        _                        => "/ month",
+    };
+
+    private void Next() { error = null; step++; }
+    private void NextSkip() { error = null; step++; }
+    private void Back() { step = Math.Max(0, step - 1); error = null; }
+    private void Skip() => DialogService.Close(false);
+
+    private async Task Finish()
+    {
+        error = null;
+        saving = true;
+        try
+        {
+            if (incomeAmount > 0 && !string.IsNullOrWhiteSpace(incomeName))
+            {
+                await IncomeApi.CreateAsync(new CreateIncomeSourceRequest(
+                    incomeName, incomeAmount, incomeFrequency, null));
+
+                if (!string.IsNullOrWhiteSpace(accountName))
+                {
+                    await AccountsApi.CreateAccountAsync(new CreateAccountRequest(accountName, accountType));
+                }
+            }
+
+            foreach (var d in debtEntries.Where(d => d.Balance > 0 && !string.IsNullOrWhiteSpace(d.Name)))
+            {
+                await DebtsApi.CreateAsync(new CreateDebtAccountRequest(
+                    d.Name, d.Balance, d.Rate / 100m, Math.Max(d.MinPayment, 1m)));
+            }
+
+            var dueDate = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1);
+            foreach (var e in expenseEntries.Where(e => e.Amount > 0))
+            {
+                await ExpensesApi.CreateAsync(new CreatePlannedExpenseRequest(
+                    e.Label, e.Amount, dueDate, null, true,
+                    e.MustPay ? ExpensePriority.MustPay : ExpensePriority.WantToPay));
+            }
+
+            NotificationService.Notify(NotificationSeverity.Success, "Setup complete!",
+                "Your plan is ready. Check the dashboard for your first insights.");
+            DialogService.Close(true);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

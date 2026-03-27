@@ -98,7 +98,10 @@
 }
 else if (scenarios.Count == 0)
 {
-    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">No scenarios yet. Create one above.</RadzenAlert>
+    <RadzenCard>
+        <EmptyState Icon="📊" Title="No scenarios yet."
+                    Message="Create a scenario to model debt payoff strategies and see exactly when you'll be debt-free." />
+    </RadzenCard>
 }
 else
 {
@@ -127,6 +130,17 @@ else
                         Total paid: @result.TotalPaid.ToString("C") —
                         Total interest: @result.TotalInterestPaid.ToString("C")
                     </RadzenText>
+                    <p style="font-size:.75rem; color:var(--rz-text-secondary-color); margin:.4rem 0 0;">
+                        Based on consistent monthly payments and no new debt.
+                    </p>
+
+                    @if (scenario.Strategy == PayoffStrategy.Snowball && scenario.DebtAccounts.Count > 1)
+                    {
+                        <div class="ld-inline-tip ld-inline-tip--info rz-mt-2">
+                            <span>💡</span>
+                            <span>You're using Snowball (smallest balance first). Avalanche (highest rate first) typically saves more in total interest. Try duplicating this scenario and switching strategies to compare.</span>
+                        </div>
+                    }
 
                     @* Payoff line chart *@
                     @{
@@ -146,6 +160,76 @@ else
                         <RadzenLegend Visible="false" />
                         <RadzenChartTooltipOptions Shared="false" />
                     </RadzenChart>
+
+                    @* What-If Slider *@
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mt-3 rz-mb-1">
+                        <RadzenText TextStyle="TextStyle.Subtitle2">What If?</RadzenText>
+                        <RadzenButton Text="@(showWhatIfSet.Contains(scenario.Id) ? "Hide" : "Show")"
+                                      ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                      Click="@(() => ToggleWhatIf(scenario.Id))" />
+                    </RadzenStack>
+
+                    @if (showWhatIfSet.Contains(scenario.Id))
+                    {
+                        <div class="ld-whatif-panel">
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem" Wrap="FlexWrap.Wrap">
+                                <div style="flex:1; min-width:200px;">
+                                    <label class="ld-label">Extra monthly payment</label>
+                                    <RadzenSlider TValue="decimal"
+                                                  Value="@whatIfExtraPayment.GetValueOrDefault(scenario.Id)"
+                                                  Min="0" Max="1000" Step="25" Style="width:100%;"
+                                                  Change="@(async v => { whatIfExtraPayment[scenario.Id] = v; await RunWhatIf(scenario.Id); })" />
+                                    <div style="display:flex; justify-content:space-between; font-size:.75rem; color:var(--ld-text-secondary);">
+                                        <span>$0</span>
+                                        <span style="font-weight:700; font-size:.9rem; color:var(--ld-text-primary);">
+                                            $@whatIfExtraPayment.GetValueOrDefault(scenario.Id).ToString("N0") extra/month
+                                        </span>
+                                        <span>$1,000</span>
+                                    </div>
+                                </div>
+                                @if (whatIfLoadingSet.Contains(scenario.Id))
+                                {
+                                    <RadzenProgressBarCircular Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Small" />
+                                }
+                            </RadzenStack>
+
+                            @if (whatIfResults.TryGetValue(scenario.Id, out var wiResult))
+                            {
+                                var baseMonths = result.TotalMonths;
+                                var wiMonths = wiResult.TotalMonths;
+                                var monthsSaved = baseMonths - wiMonths;
+                                var interestSaved = result.TotalInterestPaid - wiResult.TotalInterestPaid;
+                                <div class="ld-whatif-result">
+                                    <div class="ld-whatif-stat">
+                                        <div class="ld-whatif-stat-label">New Payoff</div>
+                                        <div class="ld-whatif-stat-value">@wiMonths months</div>
+                                    </div>
+                                    <div class="ld-whatif-stat">
+                                        <div class="ld-whatif-stat-label">Months Saved</div>
+                                        <div class="ld-whatif-stat-value" style="color:@(monthsSaved > 0 ? "var(--rz-success)" : "inherit");">
+                                            @(monthsSaved > 0 ? $"-{monthsSaved}" : "0")
+                                        </div>
+                                    </div>
+                                    <div class="ld-whatif-stat">
+                                        <div class="ld-whatif-stat-label">Interest Saved</div>
+                                        <div class="ld-whatif-stat-value" style="color:@(interestSaved > 0 ? "var(--rz-success)" : "inherit");">
+                                            @interestSaved.ToString("C0")
+                                        </div>
+                                    </div>
+                                    <div class="ld-whatif-stat">
+                                        <div class="ld-whatif-stat-label">Total Interest</div>
+                                        <div class="ld-whatif-stat-value">@wiResult.TotalInterestPaid.ToString("C0")</div>
+                                    </div>
+                                </div>
+                                @if (monthsSaved > 0 || interestSaved > 0)
+                                {
+                                    <RadzenButton Text="Apply to Scenario" Icon="check" ButtonStyle="ButtonStyle.Success"
+                                                  Size="ButtonSize.Small" class="rz-mt-2"
+                                                  Click="@(() => ApplyWhatIf(scenario.Id, whatIfExtraPayment.GetValueOrDefault(scenario.Id)))" />
+                                }
+                            }
+                        </div>
+                    }
 
                     @* Month-by-month breakdown (dynamic columns — plain table) *@
                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mt-2 rz-mb-2">
@@ -416,6 +500,12 @@ else
     private Dictionary<Guid, DriftSummaryDto> driftResults = [];
     private Dictionary<Guid, bool> loadingDrift = [];
 
+    // What-If state
+    private HashSet<Guid> showWhatIfSet = [];
+    private Dictionary<Guid, decimal> whatIfExtraPayment = [];
+    private Dictionary<Guid, ProjectionResultDto> whatIfResults = [];
+    private HashSet<Guid> whatIfLoadingSet = [];
+
     private Guid compareIdA;
     private Guid compareIdB;
     private ScenarioComparisonDto? comparisonResult;
@@ -575,6 +665,55 @@ else
         finally
         {
             loadingDrift[scenarioId] = false;
+        }
+    }
+
+    private void ToggleWhatIf(Guid scenarioId)
+    {
+        if (!showWhatIfSet.Add(scenarioId))
+        {
+            showWhatIfSet.Remove(scenarioId);
+            return;
+        }
+        whatIfExtraPayment.TryAdd(scenarioId, 0m);
+    }
+
+    private async Task RunWhatIf(Guid scenarioId)
+    {
+        whatIfLoadingSet.Add(scenarioId);
+        try
+        {
+            var extra = whatIfExtraPayment.GetValueOrDefault(scenarioId);
+            var result = await ScenariosApi.GetProjectionAsync(scenarioId, extra);
+            whatIfResults[scenarioId] = result;
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "What-If error", ex.Message);
+        }
+        finally
+        {
+            whatIfLoadingSet.Remove(scenarioId);
+        }
+    }
+
+    private async Task ApplyWhatIf(Guid scenarioId, decimal extraPayment)
+    {
+        // Re-run the base projection with the new extra payment applied
+        var scenario = scenarios?.FirstOrDefault(s => s.Id == scenarioId);
+        if (scenario is null) return;
+        try
+        {
+            var result = await ScenariosApi.GetProjectionAsync(scenarioId, extraPayment);
+            projectionResults[scenarioId] = result;
+            showWhatIfSet.Remove(scenarioId);
+            whatIfResults.Remove(scenarioId);
+            NotificationService.Notify(NotificationSeverity.Success, "Applied",
+                $"Projection updated to ${extraPayment:N0} extra/month.");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, "Error", ex.Message);
         }
     }
 }
