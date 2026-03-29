@@ -1,6 +1,6 @@
 # Ledgerly — Privacy-First Financial Intelligence Platform
 
-*Last Updated: March 2026 — Phase 12 Complete*
+*Last Updated: March 2026 — Phase 14 Complete*
 
 ---
 
@@ -104,55 +104,78 @@ Ledgerly is not:
 
 ---
 
-# Phase 12 — Financial Intelligence Layer
+## 6. Two-Factor Authentication
+
+* TOTP via authenticator apps (Google Authenticator, Authy, etc.)
+* QR code + manual key setup in Settings
+* Login challenge step when 2FA is enabled
+
+---
+
+## 7. Export
+
+* Full data snapshot as JSON
+* ZIP archive of CSVs (accounts, debts, income, expenses, transactions, scenarios)
+* CSV transaction import — upload a bank statement, preview and categorize rows before importing
+
+---
+
+## 8. Savings Goals
+
+* Named goals with target amount, current amount, and target date
+* Progress bars with color-coded status (on track / at risk / complete)
+
+---
+
+# Financial Intelligence Layer (Phases 12–14)
 
 Ledgerly evolves from a tracking tool into a **decision-making system**.
 
 ---
 
-## 6. Cash Flow Forecast (Survival Layer)
+## 9. Cash Flow Forecast (Survival Layer)
 
 **Purpose:** Prevent short-term financial failure
 
 * 30 / 60 / 90 day projections
 * Daily balance simulation
 * Income and bill event markers
-* Negative balance warnings
-* Low cash alerts
+* Negative balance warnings and low cash alerts
+* Optional daily burn rate overlay
 
 **Outcome:**
 Users know *when* they will run out of money — before it happens.
 
 ---
 
-## 7. Account Model (Reality Layer)
+## 10. Account Model (Reality Layer)
 
 **Purpose:** Anchor all data to real-world balances
 
 * Manual account tracking (checking, savings, cash)
 * Current balance per account
 * Transfers between accounts
-* Dashboard cash visibility
+* Dashboard cash and net worth visibility
 
 **Outcome:**
 Ledgerly reflects reality, not abstractions.
 
 ---
 
-## 8. Net Worth Tracking (Progress Layer)
+## 11. Net Worth Tracking (Progress Layer)
 
 **Purpose:** Measure true financial growth
 
 * Assets vs liabilities calculation
 * Monthly snapshot system
-* 12-month trend visualization
+* 12-month trend visualization (area + line chart)
 
 **Outcome:**
 Users see long-term progress, not just debt reduction.
 
 ---
 
-## 9. Insight Engine (Decision Layer)
+## 12. Insight Engine (Decision Layer)
 
 **Purpose:** Turn data into guidance
 
@@ -172,7 +195,7 @@ Users don’t just see data — they know what to do.
 
 ---
 
-## 10. Goal Planner (Strategy Layer)
+## 13. Goal Planner (Strategy Layer)
 
 **Purpose:** Enable constraint-based planning
 
@@ -183,24 +206,37 @@ Users don’t just see data — they know what to do.
 **Outputs:**
 
 * Required monthly effort
-* Feasibility status
+* Feasibility status (On Track / At Risk / Not Feasible)
 * Shortfall and recommendations
+* Confidence level (High / Medium / Low)
 
 **Outcome:**
 Ledgerly becomes proactive, not reactive.
 
 ---
 
+## 14. Onboarding & UX (Phase 14)
+
+**Purpose:** Reduce time-to-first-value for new users
+
+* Guided onboarding wizard (5 steps: goal → income → debts → expenses → review)
+* Designed empty states on every data page
+* First-win headline on dashboard (debt-free estimate, cash runway, or surplus)
+* Scenario What-If slider — instant recalculation without saving
+* Inline contextual recommendations on Scenarios, Budget, Cash Flow, and Goals pages
+
+---
+
 # User Loop
 
-1. Enter financial reality (income, debts, expenses)
-2. Create and compare scenarios
+1. Complete the onboarding wizard (income, debts, expenses in under 90 seconds)
+2. Create and compare debt payoff scenarios
 3. Set budget and track transactions
-4. Forecast cash flow
-5. Monitor net worth
-6. Review insights
-7. Adjust strategy via goals
-8. Repeat monthly
+4. Forecast cash flow (30/60/90-day)
+5. Monitor net worth and savings goals
+6. Review insights and inline recommendations
+7. Adjust strategy via the goal planner
+8. Export data; repeat monthly
 
 ---
 
@@ -223,11 +259,13 @@ Web           → Blazor UI
 Ledgerly prioritizes **risk reduction over convenience**:
 
 * No bank credentials stored
-* JWT-based authentication
-* Refresh token rotation
-* Rate-limited auth endpoints
-* TOTP 2FA support
-* Full data export capability
+* JWT-based authentication with 15-minute expiry
+* Rotating refresh tokens (30-day)
+* Rate-limited auth endpoints (sliding window, 5 req/60s per IP)
+* TOTP 2FA support (authenticator app)
+* Google OAuth sign-in
+* Global EF query filters — users can only access their own data
+* 94 tests including user-isolation integration tests and auth flow tests
 
 ---
 
@@ -235,7 +273,8 @@ Ledgerly prioritizes **risk reduction over convenience**:
 
 Users retain full control of their data:
 
-* Export as JSON or CSV
+* Export as JSON (full snapshot) or CSV (ZIP of entity files)
+* CSV transaction import from manual bank exports
 * No vendor lock-in
 * No hidden data processing
 
@@ -274,8 +313,9 @@ Future expansion focuses on:
 
 * Smarter insights (not AI fluff — real signals)
 * Multi-goal optimization
-* CSV import (optional, user-controlled)
 * Advanced scenario modeling
+* Public read-only share links for scenarios
+* Multi-currency support
 
 Ledgerly will not pursue:
 
