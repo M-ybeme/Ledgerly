@@ -1,335 +1,178 @@
-# Ledgerly — Privacy-First Financial Intelligence Platform
+# Ledgerly
 
-*Last Updated: March 2026 — Phase 14 Complete*
+*Last Updated: April 2026 — Phase 14 Complete | 94 tests passing*
 
----
-
-# Overview
-
-Ledgerly is a **privacy-first financial simulation and planning platform** designed to give users clarity, control, and confidence over their financial decisions — without requiring bank integrations or exposing sensitive credentials.
-
-It is built around a simple principle:
-
-> You should be able to understand and plan your financial future without giving anyone access to your accounts.
+A privacy-first financial simulation and planning tool built with .NET 8, Blazor Server, and PostgreSQL. No bank integrations. No credential storage. Manual data entry with deterministic modeling.
 
 ---
 
-# Core Philosophy
+## Tech Stack
 
-Ledgerly deliberately avoids:
-
-* Bank account integrations (Plaid, MX, etc.)
-* Credential storage
-* Third-party financial data dependencies
-
-Instead, it focuses on:
-
-* Manual but intentional data entry
-* Deterministic financial modeling
-* Transparent calculations
-* Exportable, user-owned data
-
-This results in:
-
-* Lower security risk
-* No compliance burden
-* Full user control
+| Layer | Technology |
+|---|---|
+| Backend | .NET 8, ASP.NET Core, EF Core 8 |
+| Database | PostgreSQL (Npgsql 8) |
+| Frontend | Blazor Server, Radzen.Blazor v9 |
+| Auth | ASP.NET Core Identity + JWT + TOTP 2FA + Google OAuth |
+| Email | SendGrid |
+| Logging | Serilog (console + rolling file) |
+| Tests | xUnit — 94 tests (unit + user-isolation + auth flow integration) |
 
 ---
 
-# What Ledgerly Is
+## Architecture
 
-Ledgerly is a:
-
-* Financial **simulation engine**
-* Budgeting and **reality tracking tool**
-* Decision-support system
-* Scenario comparison platform
-
----
-
-# What Ledgerly Is NOT
-
-Ledgerly is not:
-
-* A bank aggregator
-* A passive tracking app
-* A robo-advisor
-* A replacement for financial institutions
-
----
-
-# Key Features
-
-## 1. Debt Payoff Engine
-
-* Snowball and Avalanche strategies
-* Month-by-month amortization
-* Total interest and payoff timeline
-* Scenario duplication and comparison
-
----
-
-## 2. Budgeting System
-
-* Monthly budget plans
-* Category-based tracking
-* Planned vs actual comparison
-* Transaction logging
-
----
-
-## 3. Planned Expenses (Bills)
-
-* Recurring and one-off expenses
-* Due dates and priority levels
-* Paid / Overdue / Upcoming tracking
-* Automatic recurrence generation
-
----
-
-## 4. Income Modeling
-
-* Multiple income sources
-* Frequency normalization to monthly values
-* Expected vs actual tracking
-
----
-
-## 5. Credit Score Projection
-
-* Range-based estimation (not FICO)
-* Utilization, age, and payment history modeling
-* Month-by-month projections tied to scenarios
-
----
-
-## 6. Two-Factor Authentication
-
-* TOTP via authenticator apps (Google Authenticator, Authy, etc.)
-* QR code + manual key setup in Settings
-* Login challenge step when 2FA is enabled
-
----
-
-## 7. Export
-
-* Full data snapshot as JSON
-* ZIP archive of CSVs (accounts, debts, income, expenses, transactions, scenarios)
-* CSV transaction import — upload a bank statement, preview and categorize rows before importing
-
----
-
-## 8. Savings Goals
-
-* Named goals with target amount, current amount, and target date
-* Progress bars with color-coded status (on track / at risk / complete)
-
----
-
-# Financial Intelligence Layer (Phases 12–14)
-
-Ledgerly evolves from a tracking tool into a **decision-making system**.
-
----
-
-## 9. Cash Flow Forecast (Survival Layer)
-
-**Purpose:** Prevent short-term financial failure
-
-* 30 / 60 / 90 day projections
-* Daily balance simulation
-* Income and bill event markers
-* Negative balance warnings and low cash alerts
-* Optional daily burn rate overlay
-
-**Outcome:**
-Users know *when* they will run out of money — before it happens.
-
----
-
-## 10. Account Model (Reality Layer)
-
-**Purpose:** Anchor all data to real-world balances
-
-* Manual account tracking (checking, savings, cash)
-* Current balance per account
-* Transfers between accounts
-* Dashboard cash and net worth visibility
-
-**Outcome:**
-Ledgerly reflects reality, not abstractions.
-
----
-
-## 11. Net Worth Tracking (Progress Layer)
-
-**Purpose:** Measure true financial growth
-
-* Assets vs liabilities calculation
-* Monthly snapshot system
-* 12-month trend visualization (area + line chart)
-
-**Outcome:**
-Users see long-term progress, not just debt reduction.
-
----
-
-## 12. Insight Engine (Decision Layer)
-
-**Purpose:** Turn data into guidance
-
-* Rule-based financial insights
-* Budget overrun warnings
-* Debt prioritization signals
-* Cash shortfall alerts
-
-**Design Principles:**
-
-* Deterministic (no AI black box)
-* Short and actionable
-* Severity-based (Info / Warning / Danger)
-
-**Outcome:**
-Users don’t just see data — they know what to do.
-
----
-
-## 13. Goal Planner (Strategy Layer)
-
-**Purpose:** Enable constraint-based planning
-
-* Debt-free by date
-* Savings targets
-* Spending caps
-
-**Outputs:**
-
-* Required monthly effort
-* Feasibility status (On Track / At Risk / Not Feasible)
-* Shortfall and recommendations
-* Confidence level (High / Medium / Low)
-
-**Outcome:**
-Ledgerly becomes proactive, not reactive.
-
----
-
-## 14. Onboarding & UX (Phase 14)
-
-**Purpose:** Reduce time-to-first-value for new users
-
-* Guided onboarding wizard (5 steps: goal → income → debts → expenses → review)
-* Designed empty states on every data page
-* First-win headline on dashboard (debt-free estimate, cash runway, or surplus)
-* Scenario What-If slider — instant recalculation without saving
-* Inline contextual recommendations on Scenarios, Budget, Cash Flow, and Goals pages
-
----
-
-# User Loop
-
-1. Complete the onboarding wizard (income, debts, expenses in under 90 seconds)
-2. Create and compare debt payoff scenarios
-3. Set budget and track transactions
-4. Forecast cash flow (30/60/90-day)
-5. Monitor net worth and savings goals
-6. Review insights and inline recommendations
-7. Adjust strategy via the goal planner
-8. Export data; repeat monthly
-
----
-
-# Architecture
-
-Ledgerly follows a strict **Clean Architecture** approach:
+Clean architecture with strict layer boundaries:
 
 ```
-Domain        → Core business models and rules
-Application   → Use cases and services
-Infrastructure→ Persistence and external concerns
-API           → Controllers and auth
-Web           → Blazor UI
+src/
+  Ledgerly.Domain          # Entities, enums, core rules. No EF or infra references.
+  Ledgerly.Contracts       # Sealed record DTOs and request types. References Domain only.
+  Ledgerly.Application     # Use case services, repository interfaces, validation.
+  Ledgerly.Infrastructure  # EF Core DbContext, repository impls, SendGrid, Serilog.
+  Ledgerly.Api             # Controllers, JWT auth, DI wiring. Depends on Application only.
+  Ledgerly.Web             # Blazor Server UI, API clients, view models.
+
+tests/
+  Ledgerly.Tests           # xUnit test project
+```
+
+Domain → Application → Infrastructure. Controllers never reference DbContext directly.
+
+---
+
+## Features
+
+### Debt Payoff Engine
+- Snowball and Avalanche strategies
+- Month-by-month amortization with per-debt snapshots
+- Total interest and payoff timeline
+- Scenario duplication for "what-if" branching
+- Side-by-side comparison: months saved, interest saved, winner label
+
+### Reality Tracking
+- Log actual payments per debt per scenario
+- `DriftService` computes ahead/behind per debt and overall
+- Updated payoff timeline recalculated from actual payment history
+
+### Budget System
+- Monthly budget plans with category-based lines
+- Transaction CRUD linked by date range
+- Planned vs actual summary with variance
+
+### Cash Flow Forecast
+- 30 / 60 / 90-day daily balance simulation
+- Income and bill event markers
+- Negative balance warnings, low-cash alerts, burn rate overlay
+
+### Income & Planned Expenses
+- Multiple income sources with frequency normalization to monthly values
+- Recurring and one-off planned expenses with due dates and priority levels
+- Paid / Overdue / Upcoming status tracking
+- Recurring expense auto-creates next month's copy on mark-as-paid
+
+### Credit Score Projection
+- Range-based estimation (not FICO)
+- 3-factor model: utilization, account age, payment history
+- Month-by-month projections tied to debt payoff scenarios
+
+### Net Worth Tracking
+- Assets vs liabilities calculation
+- Monthly snapshot system
+- 12-month trend chart (area + line)
+
+### Savings Goals
+- Named goals with target amount, current amount, and target date
+- Progress bars with color-coded status (On Track / At Risk / Complete)
+
+### Insight Engine
+- Rule-based financial insights (no AI)
+- Budget overrun warnings, debt prioritization signals, cash shortfall alerts
+- Severity levels: Info / Warning / Danger
+
+### Goal Planner
+- Debt-free-by-date and savings target constraints
+- Outputs: required monthly effort, feasibility status, shortfall, confidence level
+
+### Export / Import
+- `GET /export/json` — full data snapshot
+- `GET /export/csv` — ZIP archive (accounts, debts, income, expenses, transactions, scenarios)
+- CSV transaction import with preview and category mapping
+
+### Two-Factor Authentication
+- TOTP via authenticator apps (Google Authenticator, Authy)
+- QR code + manual key setup in Settings
+- Login challenge step when 2FA is enabled
+
+---
+
+## Security
+
+- Global EF query filters — all queries scoped to the authenticated user's ID
+- JWT (15-min expiry) + rotating refresh tokens (30-day)
+- Rate limiting on auth endpoints: sliding window, 5 req / 60s per IP
+- TOTP 2FA support
+- Google OAuth sign-in
+- No bank credentials stored
+
+---
+
+## Running Locally
+
+**Prerequisites:** .NET 8 SDK, Docker
+
+```bash
+# Start PostgreSQL
+docker run -d --name ledgerly-postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres
+
+# Apply migrations
+dotnet ef database update --project src/Ledgerly.Infrastructure --startup-project src/Ledgerly.Api
+
+# Run API
+dotnet run --project src/Ledgerly.Api
+
+# Run Web
+dotnet run --project src/Ledgerly.Web
+
+# Run tests
+dotnet test
+```
+
+Configure `appsettings.Development.json` in `Ledgerly.Api` with connection string, JWT secret, and SendGrid key.
+
+---
+
+## Migrations
+
+```bash
+dotnet ef migrations add <Name> \
+  --project src/Ledgerly.Infrastructure \
+  --startup-project src/Ledgerly.Api
+
+dotnet ef database update \
+  --project src/Ledgerly.Infrastructure \
+  --startup-project src/Ledgerly.Api
 ```
 
 ---
 
-# Security Model
+## Completed Phases
 
-Ledgerly prioritizes **risk reduction over convenience**:
-
-* No bank credentials stored
-* JWT-based authentication with 15-minute expiry
-* Rotating refresh tokens (30-day)
-* Rate-limited auth endpoints (sliding window, 5 req/60s per IP)
-* TOTP 2FA support (authenticator app)
-* Google OAuth sign-in
-* Global EF query filters — users can only access their own data
-* 94 tests including user-isolation integration tests and auth flow tests
-
----
-
-# Data Ownership
-
-Users retain full control of their data:
-
-* Export as JSON (full snapshot) or CSV (ZIP of entity files)
-* CSV transaction import from manual bank exports
-* No vendor lock-in
-* No hidden data processing
-
----
-
-# Product Positioning
-
-Ledgerly is best described as:
-
-> A privacy-first financial simulator with decision intelligence
-
-It sits between:
-
-* Spreadsheets (flexible but manual)
-* Budget apps (automated but shallow)
-
-Ledgerly provides:
-
-* Structure without lock-in
-* Insight without surveillance
-
----
-
-# Target Users
-
-* Developers and technical users
-* Privacy-conscious individuals
-* People actively working on debt payoff
-* Users who want to model scenarios, not just track history
-
----
-
-# Roadmap Direction
-
-Future expansion focuses on:
-
-* Smarter insights (not AI fluff — real signals)
-* Multi-goal optimization
-* Advanced scenario modeling
-* Public read-only share links for scenarios
-* Multi-currency support
-
-Ledgerly will not pursue:
-
-* Bank integrations
-* Ads or data monetization
-* Black-box AI recommendations
-
----
-
-# Final Statement
-
-Ledgerly is built on a clear stance:
-
-> Financial clarity should not require financial exposure.
-
-This is not a compromise.
-It is the product’s defining advantage.
+| Phase | Description |
+|---|---|
+| 0 | Foundation — EF Core, PostgreSQL, migrations |
+| 0.5 | Clean architecture hardening |
+| 1 | Debt projection engine (Snowball/Avalanche, unit tests) |
+| 2 | Budget system (BudgetCategory, BudgetPlan, Transactions) |
+| 3 | Scenario comparison and duplication |
+| 4 | Reality tracking (ActualPayment, DriftService) |
+| 5 | Credit score estimation (3-factor model) |
+| 6 | UI/UX — Radzen.Blazor v9, dialogs, notifications |
+| 7 | Auth — Identity + JWT + SendGrid + user isolation |
+| 8 | Dashboard, income sources, planned expenses, dark/light theme |
+| 9 | TOTP 2FA |
+| 10 | Export (JSON + CSV), net worth chart, overdue email notifications |
+| 11 | Rate limiting, refresh tokens, Google OAuth, Serilog, savings goals |
+| 12 | Cash flow forecast, account model, net worth tracking |
+| 13 | Insight engine, goal planner |
+| 14 | Onboarding wizard, empty states, what-if slider, inline recommendations |

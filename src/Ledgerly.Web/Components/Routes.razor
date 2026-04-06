@@ -1,6 +1,8 @@
 @using Ledgerly.Contracts.Auth
 @using Ledgerly.Web.Auth
 @using Microsoft.AspNetCore.Components
+@using System.Text.Json
+@using System.Text
 @implements IDisposable
 @inject AuthTokenService AuthTokenService
 @inject Ledgerly.Web.Services.AuthApiClient AuthApi
@@ -56,12 +58,79 @@
 
         if (token is not null && email is not null)
         {
-            AuthTokenService.SetToken(new AuthTokenDto(token, email, default), refreshToken);
-            ScheduleRefresh();
+            if (!IsTokenExpired(token))
+            {
+                // JWT still valid — restore immediately
+                AuthTokenService.SetToken(new AuthTokenDto(token, email, default), refreshToken);
+                ScheduleRefresh();
+            }
+            else if (refreshToken is not null)
+            {
+                // JWT expired but refresh token present — silently refresh before restoring state
+                await TryRefreshOnStartupAsync(refreshToken);
+            }
+            else
+            {
+                // Expired JWT, no refresh token — clear and force re-login
+                await ClearStorageAsync();
+                AuthTokenService.MarkInitialized();
+            }
         }
         else
         {
             AuthTokenService.MarkInitialized();
+        }
+    }
+
+    private async Task TryRefreshOnStartupAsync(string refreshToken)
+    {
+        try
+        {
+            var result = await AuthApi.RefreshAsync(refreshToken);
+            await JS.InvokeVoidAsync("localStorage.setItem", "authToken", result.Token);
+            if (result.RefreshToken is not null)
+                await JS.InvokeVoidAsync("localStorage.setItem", "refreshToken", result.RefreshToken);
+            AuthTokenService.SetToken(result, result.RefreshToken);
+            ScheduleRefresh();
+        }
+        catch
+        {
+            await ClearStorageAsync();
+            AuthTokenService.MarkInitialized();
+        }
+    }
+
+    private async Task ClearStorageAsync()
+    {
+        await JS.InvokeVoidAsync("localStorage.removeItem", "authToken");
+        await JS.InvokeVoidAsync("localStorage.removeItem", "authEmail");
+        await JS.InvokeVoidAsync("localStorage.removeItem", "refreshToken");
+    }
+
+    private static bool IsTokenExpired(string token)
+    {
+        try
+        {
+            var parts = token.Split('.');
+            if (parts.Length < 2) return true;
+
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            var mod = payload.Length % 4;
+            if (mod == 2) payload += "==";
+            else if (mod == 3) payload += "=";
+
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("exp", out var expProp) &&
+                expProp.TryGetInt64(out var exp))
+            {
+                return DateTimeOffset.UtcNow.ToUnixTimeSeconds() >= exp;
+            }
+            return true;
+        }
+        catch
+        {
+            return true;
         }
     }
 
@@ -89,9 +158,7 @@
         {
             // Refresh token expired or revoked — clear session
             AuthTokenService.ClearToken();
-            await JS.InvokeVoidAsync("localStorage.removeItem", "authToken");
-            await JS.InvokeVoidAsync("localStorage.removeItem", "authEmail");
-            await JS.InvokeVoidAsync("localStorage.removeItem", "refreshToken");
+            await ClearStorageAsync();
         }
     }
 
